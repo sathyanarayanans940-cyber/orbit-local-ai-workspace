@@ -30,12 +30,14 @@ A self-contained local AI chat workspace UI inspired by ChatGPT and Open WebUI. 
 - Markdown-style responses with labeled code blocks and copy buttons
 - Offline KaTeX math rendering with bundled fonts and no CDN dependency
 - Demo mode when neither local runtime is running
-- Built-in offline PDF, DOCX, PPTX, and chart generation with downloadable chat attachments
+- Built-in offline PDF, DOCX, PPTX and XLSX generation with previews and downloadable chat attachments
+- 21 SVG chart types and SVG diagrams, with compatible chart-type switching, table views and downloads
 
 ## Widgets and generated files
 
 Open **More → Widgets** in the sidebar to enable or disable PDF, Word, PowerPoint, Excel,
-charts and diagrams independently. All six are included; **Check tools** verifies the
+charts, diagrams, text/code files, Jupyter notebooks and ZIP archives independently.
+All nine output kinds are included; **Check tools** verifies the
 bundled document engine loads. There is no Python-module installation and no
 document-generation service. Use an installed local model and turn Web search
 off for fully offline chat; a cloud model still needs its usual internet connection.
@@ -46,8 +48,12 @@ Orbit tells the selected model which tools are enabled. The model returns
 validated structured content, never executable scripts. Files are created
 locally and displayed with the upload-style file icons. Click a card to preview; use its download button to save.
 Generated files also appear in **Files**, which links back to their conversation.
-Suitable numeric Markdown tables have a **Chart** button. Charts offer bar,
-line and pie views, SVG downloads, a data table, totals, and means.
+Suitable numeric Markdown tables have a **Chart** button. Charts support 21 types:
+bar, line, pie, doughnut, area, scatter, curve, box, Gantt, horizontal bar,
+stacked bar, percent bar, stacked area, step, histogram, heatmap, bubble,
+waterfall, radar, funnel and treemap. The chart menu offers compatible type
+switches and a data-table view. SVG downloads are static; the chart controls
+belong to the Orbit interface.
 
 ### Usage
 
