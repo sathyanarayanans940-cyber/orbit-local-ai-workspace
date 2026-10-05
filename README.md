@@ -1,6 +1,6 @@
-# Orbit AI workspace
+# Orbit local AI workspace
 
-Personal software project: an AI chat workspace integrating **Google Gemini and DeepSeek APIs**, with **Ollama and LM Studio** support for local models. Built with JavaScript, Python provider adapters, IndexedDB and offline document libraries for file uploads, previews and document generation.
+Personal software project: a **local AI workspace for LM Studio and Ollama**, with optional **Google Gemini and DeepSeek API integrations**. Built with JavaScript, Python provider adapters, IndexedDB and offline document libraries for file uploads, previews and document generation.
 
 **Status:** actively developed prototype. Features and regression tests are included; this portfolio snapshot does not establish production readiness or reliable output from every model. Generated content depends on the selected model.
 
@@ -17,11 +17,11 @@ This snapshot focuses on the local application and retains the experimental `clo
 
 A self-contained local AI chat workspace UI inspired by ChatGPT and Open WebUI. It includes:
 
-- Google Gemini and DeepSeek API integration through Python provider adapters
+- Local model discovery for LM Studio (`127.0.0.1:1234`) and Ollama (`127.0.0.1:11434`)
 - Responsive conversation history sidebar
 - Light, dark, and system appearance modes
-- Local model discovery for Ollama (`127.0.0.1:11434`) and LM Studio (`127.0.0.1:1234`)
 - Model-aware chat requests for both local APIs
+- Optional Google Gemini and DeepSeek API integrations through Python provider adapters
 - A ChatGPT-style plus menu for model selection and file uploads
 - File picker and drag-and-drop attachments on the message composer
 - Image attachments are sent as multimodal payloads to vision-capable local models
