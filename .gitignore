@@ -1,0 +1,25 @@
+# Local state and credentials
+.DS_Store
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.db
+*.sqlite*
+dist/
+build/
+target/
+bin/
+obj/
+coverage/
+tests/output/
+output/
+release/
+.orbit*
+*.tsbuildinfo

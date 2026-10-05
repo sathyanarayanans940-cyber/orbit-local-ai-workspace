@@ -1,0 +1,29 @@
+{
+  "name": "orbit-local-workspace",
+  "private": true,
+  "scripts": {
+    "build:widgets": "node tests/build-document-fonts.cjs && esbuild widgets-engine.js --bundle --platform=browser --format=iife --global-name=OrbitWidgetEngine --minify --legal-comments=eof --outfile=vendor/widgets/engine.js && node tests/widget-licenses.cjs",
+    "test:widgets": "node --test tests/widgets.test.cjs",
+    "test": "node --test tests/*.test.cjs",
+    "test:extreme": "node tests/extreme-audit.cjs",
+    "pretest": "node -e \"require('fs').mkdirSync('tests/output/document-vision', { recursive: true })\""
+  },
+  "dependencies": {
+    "@fontsource/noto-serif": "5.2.7",
+    "@fontsource/roboto-mono": "5.2.7",
+    "docx": "9.7.1",
+    "docx-preview": "0.3.7",
+    "jszip": "3.10.2",
+    "mathjax-full": "3.2.2",
+    "pdfmake": "0.2.20",
+    "pptxgenjs": "4.0.1"
+  },
+  "overrides": {
+    "image-size": "2.0.4",
+    "@xmldom/xmldom": "0.9.12"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "fake-indexeddb": "6.2.4"
+  }
+}

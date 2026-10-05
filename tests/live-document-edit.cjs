@@ -1,0 +1,5 @@
+/* Two tiny synthetic plans through the installed gateway. Never reads credentials. */
+const fs=require('node:fs'),W=require('../widgets.js'),E=require('../document-edits.js');
+globalThis.OrbitWidgets=W;
+const cases=[{request:'Edit Notes.docx: replace only the introduction with "This introduction now explains dynamic programming." Keep everything else unchanged.',messages:[{role:'assistant',artifacts:[{id:'live-edit',spec:W.normalize({kind:'docx',title:'Notes',blocks:[{type:'paragraph',text:'Original introduction.'},{type:'heading',text:'Keep this section',level:1},{type:'paragraph',text:'Unrelated material remains unchanged.'}]})}]}]}];
+(async()=>{const plans=[];for(const c of cases)await E.prepare(c.request,c.messages,{plan:async messages=>{plans.push(messages);return JSON.stringify({edits:[{op:'replace',path:['blocks',0,'text'],before:'Original introduction.',value:'This introduction now explains dynamic programming.'}]});},generate:async spec=>new Blob([JSON.stringify(spec)])});fs.writeFileSync('/tmp/orbit-edit-model-requests.json',JSON.stringify(plans));})();

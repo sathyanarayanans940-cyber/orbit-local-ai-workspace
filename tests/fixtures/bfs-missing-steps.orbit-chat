@@ -1,0 +1,598 @@
+{
+  "format": "orbit.chat",
+  "version": 1,
+  "type": "conversation",
+  "title": "BFS Tree Example",
+  "titleManuallyEdited": false,
+  "archived": false,
+  "pinned": false,
+  "exportedAt": "2026-09-27T11:28:03.373Z",
+  "messages": [
+    {
+      "role": "user",
+      "text": "bro show me a bfs tree example",
+      "time": "9:44 PM"
+    },
+    {
+      "role": "assistant",
+      "text": "Hey Sathya! No worries, I gotchu! Let's check out a Breadth-First Search (BFS) tree example. It's super useful for finding the shortest path in unweighted graphs, or just exploring all nodes level by level. Think of it like ripples spreading out from a stone dropped in water! 🌊\n\nHere's the graph we'll be using for our example:\n\n\n\nWe'll start our BFS from node `A`. We'll keep track of a queue to hold nodes to visit, and a \"visited\" set to remember which nodes we've already seen. The BFS tree will grow as we explore!\n\n### Step 1: Start BFS from Node A\n\nWe start by adding node `A` to our queue and marking it as visited. `A` becomes the root of our BFS tree.\n\n*   **Queue:** `[A]`\n*   **Visited:** `{A}`\n*   **BFS Tree Edges:** (none yet, `A` is the root)\n\n\n\n### Step 2: Dequeue A, Enqueue B and C\n\nNow, we dequeue `A`. Its neighbors are `B` and `C`. Since neither `B` nor `C` has been visited, we add them to the queue and mark them as visited. We also add edges `A-B` and `A-C` to our BFS tree.\n\n*   **Queue:** `[B, C]`\n*   **Visited:** `{A, B, C}`\n*   **BFS Tree Edges:** `A-B`, `A-C`\n\n\n\n### Step 3: Dequeue B, Enqueue D and E\n\nNext up, we dequeue `B`. Its neighbors are `A`, `D`, and `E`.\n*   `A` is already visited, so we skip it.\n*   `D` is not visited, so we enqueue it and mark it. Add edge `B-D`.\n*   `E` is not visited, so we enqueue it and mark it. Add edge `B-E`.\n\n*   **Queue:** `[C, D, E]`\n*   **Visited:** `{A, B, C, D, E}`\n*   **BFS Tree Edges:** `A-B`, `A-C`, `B-D`, `B-E`\n\n\n\n### Step 4: Dequeue C, Enqueue F\n\nTime to dequeue `C`. Its neighbors are `A` and `F`.\n*   `A` is already visited, skip.\n*   `F` is not visited, so we enqueue it and mark it. Add edge `C-F`.\n\n*   **Queue:** `[D, E, F]`\n*   **Visited:** `{A, B, C, D, E, F}`\n*   **BFS Tree Edges:** `A-B`, `A-C`, `B-D`, `B-E`, `C-F`\n\n\n\n### Step 5: Dequeue D\n\nDequeue `D`. Its only neighbor is `B`.\n*   `B` is already visited, so we skip it. No new nodes or edges are added.\n\n*   **Queue:** `[E, F]`\n*   **Visited:** `{A, B, C, D, E, F}`\n*   **BFS Tree Edges:** `A-B`, `A-C`, `B-D`, `B-E`, `C-F` (no change from previous step)\n\n\n\n### Step 6: Dequeue E\n\nDequeue `E`. Its neighbors are `B` and `F`.\n*   `B` is already visited, skip.\n*   `F` is already visited, skip. No new nodes or edges are added.\n\n*   **Queue:** `[F]`\n*   **Visited:** `{A, B, C, D, E, F}`\n*   **BFS Tree Edges:** `A-B`, `A-C`, `B-D`, `B-E`, `C-F` (no change)\n\n\n\n### Step 7: Dequeue F\n\nDequeue `F`. Its neighbors are `C` and `E`.\n*   `C` is already visited, skip.\n*   `E` is already visited, skip. No new nodes or edges are added.\n\n*   **Queue:** `[]` (empty!)\n*   **Visited:** `{A, B, C, D, E, F}`\n*   **BFS Tree Edges:** `A-B`, `A-C`, `B-D`, `B-E`, `C-F` (no change)\n\n\n\nThe queue is empty, so the BFS is complete!\n\n### Final BFS Tree\n\nHere's what our final BFS tree looks like. It includes all nodes reachable from `A` and only the edges that were \"first discovered\" during the BFS traversal. Notice how the edge `E-F` from the original graph isn't in the BFS tree because `F` was discovered via `C` earlier.\n\n\n\nSo there you have it, bro! That's how a BFS tree gets built step-by-step. Let me know if you wanna see another example or have any questions! 😊",
+      "time": "4:56 PM",
+      "artifacts": [
+        {
+          "id": "38c07057-e517-4ad4-ba39-fbd98cd718d1",
+          "spec": {
+            "kind": "diagram",
+            "title": "Original Graph",
+            "width": 600,
+            "height": 400,
+            "nodes": [
+              {
+                "id": "A",
+                "label": "A",
+                "x": 300,
+                "y": 50,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "B",
+                "label": "B",
+                "x": 200,
+                "y": 150,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "C",
+                "label": "C",
+                "x": 400,
+                "y": 150,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "D",
+                "label": "D",
+                "x": 100,
+                "y": 250,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "E",
+                "label": "E",
+                "x": 300,
+                "y": 250,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "F",
+                "label": "F",
+                "x": 500,
+                "y": 250,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              }
+            ],
+            "edges": [
+              {
+                "from": "A",
+                "to": "B",
+                "label": "",
+                "arrow": "none",
+                "color": "#5984f5",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "A",
+                "to": "C",
+                "label": "",
+                "arrow": "none",
+                "color": "#5984f5",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "B",
+                "to": "D",
+                "label": "",
+                "arrow": "none",
+                "color": "#5984f5",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "B",
+                "to": "E",
+                "label": "",
+                "arrow": "none",
+                "color": "#5984f5",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "C",
+                "to": "F",
+                "label": "",
+                "arrow": "none",
+                "color": "#5984f5",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "E",
+                "to": "F",
+                "label": "",
+                "arrow": "none",
+                "color": "#5984f5",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              }
+            ],
+            "groups": []
+          },
+          "size": 2753,
+          "position": 331
+        },
+        {
+          "id": "57ea30b1-fe43-4300-9e32-4904507d74b0",
+          "spec": {
+            "kind": "diagram",
+            "title": "BFS Step 1: Start at A",
+            "width": 600,
+            "height": 400,
+            "nodes": [
+              {
+                "id": "A",
+                "label": "A",
+                "x": 300,
+                "y": 50,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "B",
+                "label": "B",
+                "x": 200,
+                "y": 150,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "C",
+                "label": "C",
+                "x": 400,
+                "y": 150,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "D",
+                "label": "D",
+                "x": 100,
+                "y": 250,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "E",
+                "label": "E",
+                "x": 300,
+                "y": 250,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "F",
+                "label": "F",
+                "x": 500,
+                "y": 250,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "Q",
+                "label": "Queue: [A]",
+                "x": 100,
+                "y": 350,
+                "shape": "rect",
+                "width": 160,
+                "height": 40,
+                "color": "#e0e0e0"
+              },
+              {
+                "id": "V",
+                "label": "Visited: {A}",
+                "x": 450,
+                "y": 350,
+                "shape": "rect",
+                "width": 160,
+                "height": 40,
+                "color": "#e0e0e0"
+              }
+            ],
+            "edges": [
+              {
+                "from": "A",
+                "to": "B",
+                "label": "",
+                "arrow": "none",
+                "color": "#5984f5",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "A",
+                "to": "C",
+                "label": "",
+                "arrow": "none",
+                "color": "#5984f5",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "B",
+                "to": "D",
+                "label": "",
+                "arrow": "none",
+                "color": "#5984f5",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "B",
+                "to": "E",
+                "label": "",
+                "arrow": "none",
+                "color": "#5984f5",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "C",
+                "to": "F",
+                "label": "",
+                "arrow": "none",
+                "color": "#5984f5",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "E",
+                "to": "F",
+                "label": "",
+                "arrow": "none",
+                "color": "#5984f5",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              }
+            ],
+            "groups": []
+          },
+          "size": 3398,
+          "position": 762
+        },
+        {
+          "id": "f6049dd6-c2e4-4ff6-9eca-205b48fbc667",
+          "spec": {
+            "kind": "diagram",
+            "title": "BFS Step 2: Explore A's Neighbors",
+            "width": 600,
+            "height": 400,
+            "nodes": [
+              {
+                "id": "A",
+                "label": "A",
+                "x": 300,
+                "y": 50,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "B",
+                "label": "B",
+                "x": 200,
+                "y": 150,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "C",
+                "label": "C",
+                "x": 400,
+                "y": 150,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "D",
+                "label": "D",
+                "x": 100,
+                "y": 250,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "E",
+                "label": "E",
+                "x": 300,
+                "y": 250,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "F",
+                "label": "F",
+                "x": 500,
+                "y": 250,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "Q",
+                "label": "Queue: [B, C]",
+                "x": 100,
+                "y": 350,
+                "shape": "rect",
+                "width": 160,
+                "height": 40,
+                "color": "#e0e0e0"
+              },
+              {
+                "id": "V",
+                "label": "Visited: {A,B,C}",
+                "x": 450,
+                "y": 350,
+                "shape": "rect",
+                "width": 160,
+                "height": 40,
+                "color": "#e0e0e0"
+              }
+            ],
+            "edges": [
+              {
+                "from": "A",
+                "to": "B",
+                "label": "",
+                "arrow": "end",
+                "color": "#28a745",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "A",
+                "to": "C",
+                "label": "",
+                "arrow": "end",
+                "color": "#28a745",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "B",
+                "to": "D",
+                "label": "",
+                "arrow": "none",
+                "color": "#5984f5",
+                "dashed": true,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "B",
+                "to": "E",
+                "label": "",
+                "arrow": "none",
+                "color": "#5984f5",
+                "dashed": true,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "C",
+                "to": "F",
+                "label": "",
+                "arrow": "none",
+                "color": "#5984f5",
+                "dashed": true,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "E",
+                "to": "F",
+                "label": "",
+                "arrow": "none",
+                "color": "#5984f5",
+                "dashed": true,
+                "fromPort": "auto",
+                "toPort": "auto"
+              }
+            ],
+            "groups": []
+          },
+          "size": 3675,
+          "position": 1094
+        },
+        {
+          "id": "e8c05691-426f-46e3-87fa-05eaac07252c",
+          "spec": {
+            "kind": "diagram",
+            "title": "Final BFS Tree (from Node A)",
+            "width": 600,
+            "height": 400,
+            "nodes": [
+              {
+                "id": "A",
+                "label": "A",
+                "x": 300,
+                "y": 50,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "B",
+                "label": "B",
+                "x": 200,
+                "y": 150,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "C",
+                "label": "C",
+                "x": 400,
+                "y": 150,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "D",
+                "label": "D",
+                "x": 100,
+                "y": 250,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "E",
+                "label": "E",
+                "x": 300,
+                "y": 250,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              },
+              {
+                "id": "F",
+                "label": "F",
+                "x": 500,
+                "y": 250,
+                "shape": "circle",
+                "width": 64,
+                "height": 64,
+                "color": "#5984f5"
+              }
+            ],
+            "edges": [
+              {
+                "from": "A",
+                "to": "B",
+                "label": "",
+                "arrow": "end",
+                "color": "#5984f5",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "A",
+                "to": "C",
+                "label": "",
+                "arrow": "end",
+                "color": "#5984f5",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "B",
+                "to": "D",
+                "label": "",
+                "arrow": "end",
+                "color": "#5984f5",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "B",
+                "to": "E",
+                "label": "",
+                "arrow": "end",
+                "color": "#5984f5",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              },
+              {
+                "from": "C",
+                "to": "F",
+                "label": "",
+                "arrow": "end",
+                "color": "#5984f5",
+                "dashed": false,
+                "fromPort": "auto",
+                "toPort": "auto"
+              }
+            ],
+            "groups": []
+          },
+          "size": 2999,
+          "position": 3058
+        }
+      ]
+    }
+  ]
+}

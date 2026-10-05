@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' blob:; worker-src blob:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Orbit isolated computation</title>
+<script>
+// This page is embedded with allow-scripts only: never add allow-same-origin.
+let worker;
+addEventListener('message', event => {
+  if (event.source !== parent || worker || parent === window) return;
+  worker = new Worker(URL.createObjectURL(new Blob([event.data.worker], {type:'text/javascript'})));
+  worker.onmessage = event => {
+    if (event.data?.type === 'result') parent.postMessage(event.data, '*');
+  };
+  worker.onerror = event => parent.postMessage({type:'result', ok:false, error:event.message || 'Analyze worker failed'}, '*');
+  worker.postMessage(event.data);
+});
+parent.postMessage({type:'ready'}, '*');
+</script>

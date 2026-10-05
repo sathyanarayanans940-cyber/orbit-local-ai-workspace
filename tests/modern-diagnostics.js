@@ -1,0 +1,2 @@
+document.querySelector('#result').textContent='Scripts loading…';window.addEventListener('error',e=>{document.querySelector('#result').textContent+='\n'+(e.message||'Script load failed: '+e.target.src);},true);
+window.addEventListener('load',()=>{document.querySelector('#result').textContent+='\nLoaded: '+[typeof OrbitWidgets,typeof OrbitWidgetEngine,typeof OrbitLongDocuments,typeof document.querySelector('#run').onclick].join(',');});

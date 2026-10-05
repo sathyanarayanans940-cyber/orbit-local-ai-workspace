@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: orbit-cloud
+    runtime: docker
+    plan: free
+    dockerfilePath: ./cloud/Dockerfile
+    healthCheckPath: /healthz
+    envVars:
+      - key: OLLAMA_API_KEY
+        sync: false
+      - key: ORBIT_PASSWORD
+        sync: false
+      - key: ORBIT_SESSION_SECRET
+        generateValue: true

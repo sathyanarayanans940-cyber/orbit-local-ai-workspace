@@ -1,0 +1,4 @@
+PDF.js 6.3.289 (legacy browser build), Mozilla, Apache-2.0
+Mammoth 1.12.2, BSD-2-Clause
+JSZip 3.10.2, MIT or GPL-3.0
+Downloaded from official npm distribution packages. Font and CMap licenses are alongside those assets.

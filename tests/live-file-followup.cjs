@@ -1,0 +1,14 @@
+// Opt-in regression: recover a filename-only PDF reply from synthetic PPT source.
+const fs=require('fs'),vm=require('vm');
+if(!process.env.ORBIT_TEST_MODEL)throw Error('Set ORBIT_TEST_MODEL explicitly');
+const source={kind:'pptx',title:'Software engineering source',slides:[{title:'Software Process Models',bullets:['Waterfall uses sequential development phases.','Iterative development refines the product over repeated cycles.']},{title:'Software Requirements Specification',bullets:['Functional requirements describe required behavior.','Quality requirements include measurable performance and reliability constraints.']},{title:'Bridge Entity',bullets:['OrderLine resolves the many-to-many relationship between Order and Product.','OrderLine stores order_id, product_id, quantity and unit_price.']}]};
+const message={role:'assistant',text:'I got you, bro! I will prepare a PDF study guide.\n\nDone — your file is ready.\n\nGenerated file: SoftwareEngineeringStudyGuide.pdf'};
+const c=vm.createContext({URL,AbortSignal,AbortController,DOMException,TextDecoder,setTimeout,clearTimeout,Blob,crypto:require('crypto').webcrypto,localStorage:{getItem:()=>null},fetch:(url,options)=>fetch(new URL(url,process.env.ORBIT_TEST_URL||'http://127.0.0.1:8885'),options),state:{models:[{key:'test',id:process.env.ORBIT_TEST_MODEL,provider:'Ollama'}],selectedModel:'test',connectedProviders:new Set(),messages:[{role:'user',text:'Make a presentation about these software engineering topics.'},{role:'assistant',text:'Here is the presentation.',artifacts:[{id:'source',spec:source}]},{role:'user',text:'a pdf too bro'},message]},runtimeEndpoints:{Ollama:{chat:'/api/ollama/chat'}},isImageFile:()=>false,modelUsesCloud:()=>true,renderMessages(){},persistCurrentChat(){},updateRuntimeStatus(){},setRuntimeStatus(){},async discoverModels(){}});
+for(const f of ['widgets.js','widgets-ui.js','thinking.js'])vm.runInContext(fs.readFileSync(f,'utf8'),c);
+const app=fs.readFileSync('app.js','utf8');vm.runInContext(app.slice(app.indexOf('async function requestRuntime('),app.indexOf('async function requestGeneratedTitle(')),c);
+// Binary generation runs in the real browser in browser-file-followup.html.
+c.OrbitWidgets={...c.OrbitWidgets,generate:async()=>new Blob(['browser generation pending'])};
+(async()=>{await c.finalizeMessageWidgets(message,'a pdf too bro',AbortSignal.timeout(180000));
+fs.writeFileSync('tests/output/live-file-followup.json',JSON.stringify({model:process.env.ORBIT_TEST_MODEL,source,message},null,2));
+console.log(JSON.stringify({artifacts:message.artifacts?.map(a=>({kind:a.spec.kind,title:a.spec.title,blocks:a.spec.blocks.length})),error:message.widgetError}));
+if(message.artifacts?.length!==1||message.artifacts[0].spec.kind!=='pdf'||message.widgetError)throw Error('PDF recipe recovery failed');})();

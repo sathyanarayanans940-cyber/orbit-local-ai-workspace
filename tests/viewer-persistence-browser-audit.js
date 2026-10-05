@@ -1,0 +1,63 @@
+const escapeHtml=OrbitWidgets.escape,widgetBlobs=new Map(),$=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const isDocxFile=a=>/\.docx$/i.test(a.name),isSpreadsheetFile=a=>/\.(xlsx|xls|csv)$/i.test(a.name),isPdfFile=a=>/\.pdf$/i.test(a.name),isImageFile=a=>a.type?.startsWith('image/'),isPptxFile=a=>/\.pptx$/i.test(a.name),isTextFile=a=>/\.(txt|cpp|c)$/i.test(a.name);
+const state={currentChat:'unrelated',messages:[],savedChats:{},deletedChats:new Set(),projects:{},attachments:[],filesSource:'my',filesQuery:'',activeMode:'files'};
+const normalizedWidgetArtifacts=items=>items||[],recoverMessageWidgets=()=>{},extractAttachmentText=file=>file.text(),persistCurrentChat=()=>{};
+const attachmentFileKind=a=>({label:a.type?.startsWith('image/')?'Image':/\.pdf$/i.test(a.name)?'PDF':/\.docx$/i.test(a.name)?'Word':/\.xlsx$/i.test(a.name)?'Excel':/\.pptx$/i.test(a.name)?'PowerPoint':'Code',icon:'icon-file',className:'text'});
+const formatFileSize=size=>Math.round(size/1024)+' KB',formatFileActivity=()=> 'Today',titleForChatId=id=>state.savedChats[id]?.title||id;
+let viewerReads=0,chatNavigations=0;
+const get=IDBObjectStore.prototype.get;IDBObjectStore.prototype.get=function(...args){if(['viewer','files'].includes(this.name))viewerReads++;return get.apply(this,args);};
+const showToast=message=>$('#qa-status').textContent='ERROR: '+message;
+const loadChat=async(id,title)=>{chatNavigations++;state.currentChat=id;state.messages=(await OrbitChatStore.load(id))?.messages||[];state.activeMode='chat';$('#files-page').hidden=true;$('#chat-page').hidden=false;$('#conversation-title').textContent=title;$('#messages').innerHTML='<h2>'+escapeHtml(title)+'</h2><p>Chat column opened the source conversation.</p>';};
+(async()=>{
+ const [shell,app]=await Promise.all(['/index.html','/app.js'].map(url=>fetch(url).then(r=>r.text()))),doc=new DOMParser().parseFromString(shell,'text/html');
+ $('#setup').remove();document.body.append(doc.querySelector('.svg-sprite').cloneNode(true),doc.querySelector('.app-shell').cloneNode(true));
+ const controls=document.createElement('aside');controls.id='qa-controls';controls.innerHTML='<button id="qa-seed">1. Check Files and save tabs</button><button id="qa-restore">2. Check after reload</button><button id="qa-close-check">3. Check closed tab after reload</button><button id="qa-show-files">Files</button><div id="qa-status">Ready. No provider is called.</div>';document.body.append(controls);
+ const script=document.createElement('script');script.textContent=app.slice(app.indexOf('let visibleLibraryFiles ='),app.indexOf('function showWorkspaceMode('))+'\n'+app.slice(app.indexOf("$('#files-grid').addEventListener"),app.indexOf("$('#files-search-input').addEventListener"));document.body.append(script);
+ const index=await OrbitChatStore.ready;OrbitChatStore.adopt(index);state.savedChats=index;
+ const load=document.createElement('script');load.src='/file-preview.js?v=20';await new Promise((r,j)=>{load.onload=r;load.onerror=j;document.body.append(load);});
+ const active=selector=>document.querySelector('#preview-body>.preview-pane:not([hidden])'+(selector?' '+selector:''));
+ const tabs=()=>$$('#preview-tabs [role="tab"]');
+ const files=()=>{state.activeMode='files';$('#chat-page').hidden=true;$('#files-page').hidden=false;renderFilesPage();};
+ const checks=[];const check=(label,ok)=>{if(!ok)throw Error(label);checks.push(label);};
+ const finish=stage=>{$('#qa-status').textContent=`PASS: ${checks.length} checks (${stage})\n`+checks.map(c=>'✓ '+c).join('\n');};
+ const bind=(id,fn)=>$(id).onclick=async()=>{checks.length=0;$(id).disabled=true;try{await fn();}catch(error){$('#qa-status').textContent='FAIL: '+error.message+'\n'+checks.join('\n');}finally{$(id).disabled=false;}};
+ const original=async blob=>({type:blob.type,size:blob.size,previewId:await OrbitPreview.store(blob)});
+ const word={kind:'docx',title:'Engineering notes',style:{theme:'ocean',font:'sans'},blocks:[{type:'heading',text:'A workspace that survives reloads'},{type:'paragraph',text:'File names open this viewer. Chat names open the source conversation. Tabs remain saved until closed.'},{type:'code',text:'int main() {\n    return 0;\n}'}]};
+ bind('#qa-seed',async()=>{
+  for(const tab of tabs())await OrbitPreview.closeTab(tab.id);
+  const workbook={kind:'xlsx',title:'Results',sheets:[{name:'Data',headers:['Run','Result'],rows:Array.from({length:350},(_,i)=>[i+1,i*2])},{name:'Notes',headers:['Item'],rows:[['Saved sheet']]}]},deck={kind:'pptx',title:'Architecture',theme:'ocean',slides:[{title:'Open files in tabs',layout:'section',subtitle:'Remembered across website reloads'},{title:'Load only selected files',bullets:['Keep source files on disk','Bound cached previews','Close tabs explicitly']}]};
+  const uploaded=[];for(const [spec,name]of [[word,'Uploaded notes.docx'],[{...word,kind:'pdf'},'Report.pdf'],[workbook,'Results.xlsx'],[deck,'Slides.pptx']])uploaded.push({name,...await original(await OrbitWidgets.generate(spec))});
+  uploaded.push({name:'main.cpp',...await original(new Blob(['// FIRST α 😀\nint main() {\n    return 1;\n}\n'],{type:'text/plain'}))});
+  const other={name:'main.cpp',...await original(new Blob(['// SECOND\nint second() {\n    return 2;\n}\n'],{type:'text/plain'}))};
+  state.savedChats['qa-viewer-a']={title:'Engineering Notes',updatedAt:2,messages:[{role:'user',attachments:uploaded},{role:'assistant',artifacts:[{id:'generated-word',spec:word}]}]};
+  state.savedChats['qa-viewer-b']={title:'Code Review',updatedAt:1,messages:[{role:'user',attachments:[other]},{role:'assistant',artifacts:[{id:'generated-code',spec:{kind:'text',filename:'example.cpp',content:'// Generated safely\nint example() {\n    return 3;\n}\n'}}]}]};
+  await OrbitChatStore.save(state.savedChats);check('Files list uses disk metadata, not full transcripts',!state.savedChats['qa-viewer-a'].messages);state.currentChat='unrelated';state.messages=[];files();
+  $('#files-grid [data-open-library-file="0"]').click();await wait(()=>active('iframe[data-word-preview]'));
+  check('file name opens Word in Viewer',!!active('iframe[data-word-preview]'));check('file name keeps Files page and current chat',state.activeMode==='files'&&state.currentChat==='unrelated'&&chatNavigations===0);
+  $('#files-grid .file-library-chat').click();await wait(()=>state.activeMode==='chat');check('Chat column opens its conversation',state.currentChat==='qa-viewer-a'&&chatNavigations===1);files();
+  for(const file of collectUploadedFiles().filter(f=>f.source==='my'))await previewLibraryFile(file);
+  state.filesSource='orbit';renderFilesPage();for(const file of collectUploadedFiles().filter(f=>f.source==='orbit'))await previewLibraryFile(file);
+  check('all eight uploaded and generated files have tabs',tabs().length===8);check('duplicate names have distinct tabs',tabs().filter(t=>t.title==='main.cpp').length===2);
+  check('only bounded cached previews stay connected',$$('#preview-body>.preview-pane').length<=4);
+  await previewLibraryFile(collectUploadedFiles().find(f=>f.artifactId==='generated-code'));$('#preview-body>.preview-pane:not([hidden])').scrollTop=80;$('[data-preview-zoom="1"]').click();OrbitPreview.close();
+  check('tab manifest stores descriptors without file contents',!localStorage.getItem('orbit-viewer-tabs-v1').includes('return 3'));
+  finish('before reload');
+ });
+ bind('#qa-restore',async()=>{
+  check('reload keeps eight tab names',tabs().length===8);check('reload creates no previews',$$('#preview-body>.preview-pane').length===0);check('reload keeps viewer hidden',$('#file-preview').hidden);check('reload reads no viewer source records',viewerReads===0);
+  await OrbitPreview.open();check('only the selected file loads',$$('#preview-body>.preview-pane').length===1);check('generated source survives reload',active('pre').textContent.includes('return 3;'));check('independent zoom survives reload',$('#preview-zoom').textContent==='125%');
+  await tabs().find(t=>t.title==='Uploaded notes.docx').onclick();await wait(()=>active('iframe[data-word-preview]'));check('uploaded Word lazily restores',!!active('iframe[data-word-preview]'));
+  tabs().find(t=>t.title==='Report.pdf').click();await wait(()=>active('iframe')?.src.includes('#navpanes=0'));check('original PDF lazily restores',!!active('iframe'));await active('.preview-pdf-fallback').onclick();check('PDF raster fallback works after reload',active('canvas')?.width>0);
+  tabs().find(t=>t.title==='Results.xlsx').click();await wait(()=>active('.sheet-tabs'));active('.sheet-tabs button:last-child').click();check('uploaded Excel restores its sheets',active('.sheet-nav span').textContent.includes('Notes'));
+  tabs().find(t=>t.title==='Slides.pptx').click();await wait(()=>active()?.textContent.includes('Load only selected files'));check('uploaded slides restore',active().textContent.includes('Load only selected files'));
+  const sourceTabs=tabs().filter(t=>t.title==='main.cpp');sourceTabs[0].click();await wait(()=>active('pre')?.textContent.includes('FIRST'));sourceTabs[1].click();await wait(()=>active('pre')?.textContent.includes('SECOND'));check('same-name uploads retain the right contents',active('pre').textContent.includes('SECOND'));
+  const source=sourceTabs[1];await OrbitPreview.closeTab(source.id);check('closing removes only one tab',tabs().length===7&&tabs().filter(t=>t.title==='main.cpp').length===1);
+  OrbitPreview.close();state.filesSource='my';files();finish('after reload; reload again to check closure');
+ });
+ bind('#qa-close-check',async()=>{
+  check('explicitly closed tab stays closed after reload',tabs().length===7&&tabs().filter(t=>t.title==='main.cpp').length===1);check('remaining tabs are still unloaded',$$('#preview-body>.preview-pane').length===0&&viewerReads===0);
+  await OrbitPreview.open();state.filesSource='orbit';files();await previewLibraryFile(collectUploadedFiles().find(f=>f.artifactId==='generated-word'));check('opening a remembered generated file reuses its tab',tabs().length===7);finish('second reload');
+ });
+ $('#qa-show-files').onclick=files;files();
+ async function wait(predicate){const end=Date.now()+15000;while(!predicate()){if(Date.now()>end)throw Error('Preview did not finish loading');await new Promise(r=>setTimeout(r,25));}}
+})().catch(error=>{document.body.textContent=error.stack;});

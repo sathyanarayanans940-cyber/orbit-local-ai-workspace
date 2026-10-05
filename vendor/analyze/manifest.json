@@ -1,0 +1,52 @@
+{
+  "version": "0.28.3",
+  "packages": [
+    "libopenblas",
+    "mpmath",
+    "numpy",
+    "scipy",
+    "sympy"
+  ],
+  "files": [
+    {
+      "name": "pyodide.js",
+      "sha256": "24a458425dcb4ea9836eb5ce26701d18cb769374e2b79247602ba605bf093278"
+    },
+    {
+      "name": "pyodide.asm.js",
+      "sha256": "b22e5831eade9ff10e6fe2c811c68688cd91f10154377b4f80debcf5bafa1e56"
+    },
+    {
+      "name": "pyodide.asm.wasm",
+      "sha256": "5effb6a1a6cc4a1a85bec4622701aa797c031e1de923cbbaf2ad47abdc4ab325"
+    },
+    {
+      "name": "python_stdlib.zip",
+      "sha256": "71fee17f88a6260ec8c9c7c063533ee59c021fdc88a1ce76247378d3c4a35f4c"
+    },
+    {
+      "name": "pyodide-lock.json",
+      "sha256": "8756d8694d374e3427f239a24773421d3015da8f2bb42a64be3898ca937d8a77"
+    },
+    {
+      "name": "libopenblas-0.3.26.zip",
+      "sha256": "15c2c82b0fdfdde83a81190f35f5f4a0d15bf236a7e93944c433ae5ac6bf3ee5"
+    },
+    {
+      "name": "mpmath-1.3.0-py3-none-any.whl",
+      "sha256": "022134ea1b98efab4b011a40aaa89f19b45151c195e0d1610b9c8b28e5aaf85c"
+    },
+    {
+      "name": "numpy-2.2.5-cp313-cp313-pyodide_2025_0_wasm32.whl",
+      "sha256": "3db3c4f3e0448f4d62a85c262692f1260ccd8a91335442bd2442f21ffeddb558"
+    },
+    {
+      "name": "scipy-1.14.1-cp313-cp313-pyodide_2025_0_wasm32.whl",
+      "sha256": "6c4277bb1902f2064f5f4bd0ffbea67cf9aaf89a3fdc49e9ac1e078d9b574ef0"
+    },
+    {
+      "name": "sympy-1.13.3-py3-none-any.whl",
+      "sha256": "d28066226aba33c9908435b8aa58f24ba211a3116eee333dee639f91f9bb1379"
+    }
+  ]
+}

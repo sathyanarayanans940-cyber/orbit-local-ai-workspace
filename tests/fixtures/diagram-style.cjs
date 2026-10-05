@@ -1,0 +1,10 @@
+module.exports={kind:'diagram',title:'State machine · strings ending in 01',width:740,height:310,
+ nodes:[{id:'start',label:'Start',x:70,y:135,width:82,shape:'pill'},
+ {id:'q0',label:'q0\n(Initial)',x:245,y:135,width:104,shape:'circle',color:'#5984f5'},
+ {id:'q1',label:'q1\n(Saw 0)',x:445,y:135,width:104,shape:'circle'},
+ {id:'q2',label:'q2\n(Accepted!)',x:650,y:135,width:116,shape:'circle',color:'#41a653'}],
+ edges:[{from:'start',to:'q0'},{from:'q0',to:'q1',label:'0'},{from:'q1',to:'q2',label:'1'},
+ {from:'q0',to:'q0',label:'1',points:[{x:245,y:84},{x:265,y:84}],labelPosition:{x:265,y:98}},
+ {from:'q1',to:'q1',label:'0'},
+ {from:'q2',to:'q1',label:'0',fromPort:'bottom',toPort:'bottom',points:[{x:650,y:236},{x:445,y:236}]},
+ {from:'q2',to:'q0',label:'1',fromPort:'bottom',toPort:'bottom',points:[{x:650,y:285},{x:245,y:285}]}]};

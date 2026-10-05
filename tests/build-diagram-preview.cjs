@@ -1,0 +1,13 @@
+const fs=require('node:fs'),vm=require('node:vm'),W=require('../widgets.js'),F=require('./fixtures/diagrams.cjs');
+const source=fs.readFileSync(require.resolve('../app.js'),'utf8');
+const ctx=vm.createContext({OrbitWidgets:W,window:{katex:require('../vendor/katex/katex.min.js')},icons:{copy:''},state:{currentChat:'preview'},crypto:require('node:crypto').webcrypto});
+vm.runInContext(source.slice(source.indexOf('function escapeHtml('),source.indexOf('function latestUserMessageIndex(')),ctx);
+vm.runInContext(fs.readFileSync(require.resolve('../widgets-ui.js'),'utf8'),ctx);
+vm.runInContext('attachmentFileKind=()=>({className:"chart",icon:"icon-diagram"});',ctx);
+const message={role:'assistant',text:F.all.map((spec,i)=>`Example ${i+1}: ${spec.title}\n\n\`\`\`orbit-widget\n${JSON.stringify(spec)}\n\`\`\``).join('\n\n')+'\n\nThe complete insertion sequence finishes here.'};
+if(process.argv[2]){const input=fs.readFileSync(process.argv[2],'utf8');if(process.argv[2].endsWith('.orbit-chat'))Object.assign(message,JSON.parse(input).messages.find(m=>m.role==='assistant'));else message.text=input;}
+ctx.recoverMessageWidgets(message);
+const html=ctx.messageContentMarkup(message,0);
+const scripts=fs.readFileSync('widgets.js','utf8')+'\nconst state='+JSON.stringify({messages:[message]})+'; const widgetBlobs=new Map(); const escapeHtml=OrbitWidgets.escape;\n'+fs.readFileSync('file-preview.js','utf8');
+fs.mkdirSync('tests/output',{recursive:true});fs.writeFileSync('tests/output/diagram-preview.html',`<!doctype html><html data-theme="dark"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orbit diagram verification</title><link rel="stylesheet" href="/styles.css"><style>html,body{height:auto;overflow:auto}main.app-shell{display:block;height:auto;max-width:900px;margin:40px auto;padding:20px}nav{position:sticky;top:0;background:var(--bg);z-index:2;padding:16px;display:flex;gap:16px}button{color:var(--text);background:var(--panel);padding:10px;border:1px solid var(--border);border-radius:8px}.narrow{width:360px;max-width:100%}</style><nav><button onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark'">Toggle light/dark</button><button onclick="document.querySelector('main').classList.toggle('narrow')">Toggle mobile width</button></nav><svg style="display:none"><symbol id="icon-arrow-down" viewBox="0 0 24 24"><path d="M12 4v16m-6-6 6 6 6-6"/></symbol></svg><main class="app-shell"><h1>Orbit diagrams</h1>${html}</main><script>${scripts.replace(/<\/script/gi,"<\\/script")}</script></html>`);
+console.log('Generated tests/output/diagram-preview.html');

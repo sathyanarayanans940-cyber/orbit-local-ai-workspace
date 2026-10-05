@@ -1,0 +1,10 @@
+Orbit Analyze bundles Pyodide 0.28.3 (CPython 3.13 / WebAssembly), from
+https://cdn.jsdelivr.net/pyodide/v0.28.3/full/ .
+Pyodide's license and bundled-runtime notices are in LICENSE.
+Scientific packages: NumPy 2.2.5, SciPy 1.14.1, SymPy 1.13.3,
+mpmath 1.3.0 and OpenBLAS 0.3.26. Their original distribution archives
+are preserved intact, including their package license files.
+
+Offline deployment reference:
+https://pyodide.org/en/0.28.3/usage/downloading-and-deploying.html
+No package is downloaded by generated Python code at execution time.

@@ -1,0 +1,5 @@
+const fs=require('node:fs'),W=require('../widgets.js'),state=require('./fixtures/diagram-style.cjs'),{flow,architecture}=require('./fixtures/diagrams.cjs');
+for(const [name,theme,accent] of [['neutral','dark','#e4e4e4'],['violet','dark','#9d6bf2'],['light','light','#4c1d95']]){
+ const html=`<!doctype html><html data-theme="${theme}" style="--diagram-accent:${accent}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orbit · diagram styling</title><link rel="stylesheet" href="/styles.css"><style>html,body{height:auto;overflow:auto}main{max-width:960px;margin:48px auto;padding:24px}.orbit-diagram{margin:36px 0}h1{font-size:24px}h2{font-size:15px;font-weight:500;color:var(--text-secondary)}.diagram-plot svg{min-width:740px;max-width:740px}</style><main><h1>Diagram styling</h1><p>Chat accent for ordinary connections. Green highlights the accepting state.</p>${[state,flow,architecture].map(s=>`<figure class="orbit-diagram"><h2>${s.title}</h2><div class="diagram-plot">${W.diagramSvg(s)}</div></figure>`).join('')}</main></html>`;
+ fs.writeFileSync(`tests/output/diagram-style-${name}.html`,html);
+}

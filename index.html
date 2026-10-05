@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f6f6f6" />
+    <meta name="description" content="A private local AI workspace for Ollama and LM Studio." />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="vendor/katex/katex.min.css" />
+    <title>Orbit — Local AI workspace</title>
+    <link rel="stylesheet" href="styles.css?v=202" />
+  </head>
+  <body>
+    <svg class="svg-sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="icon-diagram" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-5h14v5"/></symbol>
+      <symbol id="icon-orbit" viewBox="0 0 24 24"><path d="M12 20.5c4.7 0 8.5-2.1 8.5-4.7s-3.8-4.7-8.5-4.7-8.5 2.1-8.5 4.7 3.8 4.7 8.5 4.7Z"/><path d="M7.8 18.9c-2.4-4-2.8-8.4-.6-9.7 2.2-1.3 5.7.8 8.2 4.8 2.4 4 2.8 8.4.6 9.7" transform="translate(0 -4)"/><circle cx="17.8" cy="6.6" r="1.7"/></symbol>
+      <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="icon-new-chat" viewBox="0 0 24 24"><path d="M12 3.75v16.5M3.75 12h16.5"/></symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m16 16 4.3 4.3"/></symbol>
+      <symbol id="icon-message" viewBox="0 0 24 24"><path d="M19.2 17.2a7.6 7.6 0 0 1-4.2 2.1c-1.7.3-3.4.1-4.8-.5L5 21l1.3-4.3A7.4 7.4 0 0 1 4 11.3a7.4 7.4 0 1 1 14.2 5.9Z"/></symbol>
+      <symbol id="icon-sparkles" viewBox="0 0 24 24"><path d="m12 3 1.1 4.2a4 4 0 0 0 2.8 2.8L20 11l-4.1 1.1a4 4 0 0 0-2.8 2.8L12 19l-1.1-4.1a4 4 0 0 0-2.8-2.8L4 11l4.1-1a4 4 0 0 0 2.8-2.8L12 3ZM19 17v4M21 19h-4M5 3v4M7 5H3"/></symbol>
+      <symbol id="icon-code" viewBox="0 0 24 24"><path d="m8.5 8-4 4 4 4M15.5 8l4 4-4 4M13.5 5l-3 14"/></symbol>
+      <symbol id="icon-projects" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></symbol>
+      <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M3.5 6.8A1.8 1.8 0 0 1 5.3 5h4l1.8 2h7.6a1.8 1.8 0 0 1 1.8 1.8v8.4a1.8 1.8 0 0 1-1.8 1.8H5.3a1.8 1.8 0 0 1-1.8-1.8V6.8Z"/></symbol>
+      <symbol id="icon-archive" viewBox="0 0 24 24"><path d="M4 8.5h16v11H4a1.5 1.5 0 0 1-1.5-1.5V10A1.5 1.5 0 0 1 4 8.5Z"/><path d="M3 4.5h18v4H3zM9 13h6"/></symbol>
+      <symbol id="icon-library" viewBox="0 0 24 24"><rect x="3.5" y="4" width="4.5" height="16" rx="1"/><rect x="9.75" y="4" width="4.5" height="16" rx="1"/><path d="m16.2 5.2 3.1-1.1 3.2 14.7-3.1 1.1-3.2-14.7Z"/></symbol>
+      <symbol id="icon-cloud" viewBox="0 0 24 24"><path d="M7.2 18.5h10.2a4.1 4.1 0 0 0 .6-8.1A6.2 6.2 0 0 0 6.2 9.2a4.7 4.7 0 0 0 1 9.3Z"/></symbol>
+      <symbol id="icon-settings" viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.4 15 .1.1a1.8 1.8 0 1 1-2.5 2.5l-.1-.1a1.8 1.8 0 0 0-3 .9v.2a1.8 1.8 0 1 1-3.6 0v-.2a1.8 1.8 0 0 0-3-.9l-.1.1a1.8 1.8 0 1 1-2.5-2.5l.1-.1a1.8 1.8 0 0 0-.9-3h-.2a1.8 1.8 0 1 1 0-3.6h.2a1.8 1.8 0 0 0 .9-3l-.1-.1a1.8 1.8 0 1 1 2.5-2.5l.1.1a1.8 1.8 0 0 0 3-.9v-.2a1.8 1.8 0 1 1 3.6 0V2a1.8 1.8 0 0 0 3 .9l.1-.1a1.8 1.8 0 1 1 2.5 2.5l-.1.1a1.8 1.8 0 0 0 .9 3h.2a1.8 1.8 0 1 1 0 3.6h-.2a1.8 1.8 0 0 0-.9 3Z"/></symbol>
+      <symbol id="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+      <symbol id="icon-moon" viewBox="0 0 24 24"><path d="M19.4 15.5A8 8 0 0 1 8.5 4.6 8.2 8.2 0 1 0 19.4 15.5Z"/></symbol>
+      <symbol id="icon-monitor" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="12" rx="1.8"/><path d="M8.5 20h7M12 16.5V20"/></symbol>
+      <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m7 9 5 5 5-5"/></symbol>
+      <symbol id="icon-sliders" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16M8 4v6M16 14v6"/></symbol>
+      <symbol id="icon-paperclip" viewBox="0 0 24 24"><path d="m8.8 12.6 5.9-5.9a3.2 3.2 0 0 1 4.5 4.5L11 19.4a5 5 0 0 1-7.1-7.1l8-8"/></symbol>
+      <symbol id="icon-sidebar" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M9.5 4v16"/></symbol>
+      <symbol id="icon-file" viewBox="0 0 24 24"><path d="M6 3.5h8l4 4v13H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2Z"/><path d="M14 3.5v4h4"/></symbol>
+      <symbol id="icon-files" viewBox="0 0 24 24"><path d="M8 3.5h7l4 4v12H8a1.8 1.8 0 0 1-1.8-1.8V5.3A1.8 1.8 0 0 1 8 3.5Z"/><path d="M15 3.5v4h4M10 12h6M10 15.5h5"/><path d="M6.2 6H5a1.8 1.8 0 0 0-1.8 1.8v11A1.8 1.8 0 0 0 5 20.5h10"/></symbol>
+      <symbol id="icon-file-pdf" viewBox="0 0 24 24"><path d="M6 3.5h8l4 4v13H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2Z"/><path d="M14 3.5v4h4"/><path d="M7 16.5h10M7 13.5h8"/></symbol>
+      <symbol id="icon-file-word" viewBox="0 0 24 24"><path d="M6 3.5h8l4 4v13H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2Z"/><path d="M14 3.5v4h4"/><path d="m7 12 1.2 5 1.8-3.6 1.8 3.6 1.2-5"/></symbol>
+      <symbol id="icon-file-presentation" viewBox="0 0 24 24"><path d="M6 3.5h8l4 4v13H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2Z"/><path d="M14 3.5v4h4"/><path d="M7 16V11h6v5M7 13h6M10 16v2"/></symbol>
+      <symbol id="icon-file-spreadsheet" viewBox="0 0 24 24"><path d="M6 3.5h8l4 4v13H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2Z"/><path d="M14 3.5v4h4M7 11h8v7H7zM7 14.5h8M11 11v7"/></symbol>
+      <symbol id="icon-file-zip" viewBox="0 0 24 24"><path d="M6 3.5h8l4 4v13H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2Z"/><path d="M14 3.5v4h4M9 4v2m0 2v2m0 2v2"/><rect x="8" y="16" width="3" height="3" rx=".6"/></symbol>
+      <symbol id="icon-file-text" viewBox="0 0 24 24"><path d="M6 3.5h8l4 4v13H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2Z"/><path d="M14 3.5v4h4M7 12h7M7 15h7M7 18h5"/></symbol>
+      <symbol id="icon-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5"/></symbol>
+      <symbol id="icon-stop" viewBox="0 0 24 24"><rect x="5.75" y="5.75" width="12.5" height="12.5" rx="1.8" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="icon-voice" viewBox="0 0 24 24"><path d="M4 10v4M8 6v12M12 3v18M16 8v8M20 5v14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></symbol>
+      <symbol id="icon-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14M6.5 13.5 12 19l5.5-5.5"/></symbol>
+      <symbol id="icon-chart" viewBox="0 0 24 24"><path d="M4 20V10h4v10M10 20V4h4v16M16 20v-7h4v7"/></symbol>
+      <symbol id="icon-share" viewBox="0 0 24 24"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5"/><path d="M5 13.5v5A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5v-5"/></symbol>
+      <symbol id="icon-import" viewBox="0 0 24 24"><path d="M12 3v12M7.5 10.5 12 15l4.5-4.5"/><path d="M5 13.5v5A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5v-5"/></symbol>
+      <symbol id="icon-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2.5"/><path d="M16 8V5.5A2.5 2.5 0 0 0 13.5 3h-8A2.5 2.5 0 0 0 3 5.5v8A2.5 2.5 0 0 0 5.5 16H8"/></symbol>
+      <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.8-3.9L4 9"/><path d="M4 4v5h5M4 13a8 8 0 0 0 14.8 3.9L20 15"/><path d="M20 20v-5h-5"/></symbol>
+      <symbol id="icon-edit" viewBox="0 0 24 24"><path d="m3.5 20.5 1.2-5.2L16 4a2.8 2.8 0 0 1 4 4L8.7 19.3l-5.2 1.2Z"/><path d="m14.5 5.5 4 4"/></symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19.5 6.5"/></symbol>
+      <symbol id="icon-pin" viewBox="0 0 24 24"><path d="m9 3 6 0-1 6 4 4v2H6v-2l4-4-1-6ZM12 15v6"/></symbol>
+      <symbol id="icon-pin-off" viewBox="0 0 24 24"><path d="m9 3 6 0-1 6 4 4v2H6v-2l4-4-1-6ZM12 15v6M3 3l18 18"/></symbol>
+      <symbol id="icon-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.2" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="icon-tools-menu" viewBox="0 0 24 24"><rect x="3.5" y="7.5" width="17" height="13" rx="2"/><path d="M8.5 7.5v-2a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v2M3.5 12.5h6.5M14 12.5h6.5"/><rect x="10" y="11" width="4" height="4" rx=".8"/></symbol>
+      <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+      <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+      <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 4h4l1 3M8 7l.7 12h6.6L16 7M10 11v5M14 11v5"/></symbol>
+      <symbol id="icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/></symbol>
+    </svg>
+
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-top">
+          <a class="brand" href="#" aria-label="Orbit home">
+            <span class="brand-mark"><svg><use href="#icon-orbit" /></svg></span>
+            <span>orbit</span>
+          </a>
+          <div class="sidebar-top-actions">
+            <button class="icon-button sidebar-search-toggle" id="toggle-history-search" type="button" aria-controls="history-search-panel" aria-expanded="false" aria-label="Search conversations" title="Search conversations">
+              <svg><use href="#icon-search" /></svg>
+            </button>
+            <button class="icon-button sidebar-toggle" id="toggle-sidebar" type="button" aria-controls="sidebar" aria-expanded="true" aria-label="Collapse sidebar" title="Collapse sidebar">
+              <svg><use href="#icon-sidebar" /></svg>
+            </button>
+            <button class="icon-button mobile-close" id="close-sidebar" type="button" aria-label="Close sidebar">
+              <svg><use href="#icon-menu" /></svg>
+            </button>
+          </div>
+        </div>
+
+        <button class="new-chat-button" id="new-chat" aria-label="New conversation">
+          <svg><use href="#icon-new-chat" /></svg>
+          <span>New conversation</span>
+        </button>
+
+        <nav class="sidebar-modes" aria-label="Orbit workspace">
+          <button class="sidebar-mode-button" id="open-library" type="button" data-workspace-mode="library" aria-label="Library">
+            <svg><use href="#icon-library" /></svg>
+            <span>Library</span>
+          </button>
+          <button class="sidebar-mode-button" id="open-projects" type="button" data-workspace-mode="projects" aria-label="Projects" aria-expanded="false" aria-controls="project-sidebar-list">
+            <svg><use href="#icon-projects" /></svg>
+            <span>Projects</span>
+            <svg class="sidebar-mode-chevron"><use href="#icon-chevron" /></svg>
+          </button>
+          <div class="project-sidebar-list" id="project-sidebar-list" hidden></div>
+          <button class="sidebar-mode-button" id="open-files" type="button" data-workspace-mode="files" aria-label="Files">
+            <svg><use href="#icon-files" /></svg>
+            <span>Files</span>
+          </button>
+          <button class="sidebar-mode-button" id="open-archives" type="button" aria-label="Archives" aria-expanded="false" aria-controls="archive-sidebar-list">
+            <svg><use href="#icon-archive" /></svg>
+            <span>Archives</span>
+            <svg class="sidebar-mode-chevron"><use href="#icon-chevron" /></svg>
+          </button>
+          <div class="archive-sidebar-list" id="archive-sidebar-list" hidden></div>
+          <button class="sidebar-mode-button" id="open-more" type="button" aria-label="More" aria-expanded="false" aria-controls="more-sidebar-list">
+            <svg><use href="#icon-tools-menu" /></svg><span>More</span><svg class="sidebar-mode-chevron"><use href="#icon-chevron" /></svg>
+          </button>
+          <div class="more-sidebar-list" id="more-sidebar-list" hidden>
+            <button class="sidebar-mode-button" id="open-widgets" type="button" data-workspace-mode="widgets" aria-label="Widgets"><svg><use href="#icon-chart" /></svg><span>Widgets</span></button>
+            <button class="sidebar-mode-button" id="open-usage" type="button" data-workspace-mode="usage" aria-label="Usage"><svg viewBox="0 0 24 24"><path d="M4 20h16M5 16l4-5 4 2 6-8"/><circle cx="19" cy="5" r="1.5"/></svg><span>Usage</span></button>
+          </div>
+        </nav>
+
+        <div class="sidebar-search" id="history-search-panel" hidden>
+          <svg><use href="#icon-search" /></svg>
+          <input id="history-search" type="search" placeholder="Search conversations" aria-label="Search conversations" />
+        </div>
+
+        <nav class="history" id="history" aria-label="Conversation history">
+          <div class="history-section" id="pinned-history-section" hidden>
+            <p class="section-label">Pinned</p>
+            <div id="pinned-history-items"></div>
+          </div>
+          <div class="history-section" id="saved-history-section" hidden>
+            <p class="section-label">Recent</p>
+            <div id="saved-history-items"></div>
+          </div>
+
+        </nav>
+        <span class="history-scroll-indicator" id="history-scroll-indicator" aria-hidden="true" hidden></span>
+
+        <div class="sidebar-bottom">
+          <div class="account-menu-wrap">
+            <button class="account-row" id="settings-button" aria-haspopup="menu" aria-expanded="false" aria-controls="account-menu">
+              <span class="avatar" id="account-avatar">S</span>
+              <span class="account-copy">
+                <strong id="account-name">SETUSER’s Orbit account</strong>
+                <span class="account-type">Personal</span>
+                <span class="runtime-status-line">
+                  <span class="status-indicator checking" id="runtime-status" aria-label="Checking runtime"></span>
+                  <span id="runtime-message">Checking runtime…</span>
+                </span>
+              </span>
+              <svg class="account-chevron"><use href="#icon-more" /></svg>
+            </button>
+            <div class="account-menu" id="account-menu" role="menu" aria-label="Account options">
+              <div class="account-menu-title" id="account-menu-title">SETUSER’s Orbit account</div>
+              <div class="account-menu-label">Appearance</div>
+              <button class="theme-option" data-theme-choice="system" role="menuitem"><svg><use href="#icon-monitor" /></svg><span>System</span><span class="theme-check"></span></button>
+              <button class="theme-option" data-theme-choice="light" role="menuitem"><svg><use href="#icon-sun" /></svg><span>Light</span><span class="theme-check"></span></button>
+              <button class="theme-option" data-theme-choice="dark" role="menuitem"><svg><use href="#icon-moon" /></svg><span>Dark</span><span class="theme-check"></span></button>
+              <div class="account-menu-divider"></div>
+              <button class="account-menu-item" id="preferences-button" type="button" role="menuitem"><svg><use href="#icon-sliders" /></svg><span>Settings</span></button>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <button class="icon-button mobile-menu" id="open-sidebar" aria-label="Open sidebar">
+            <svg><use href="#icon-menu" /></svg>
+          </button>
+          <div class="mobile-title">orbit</div>
+        </header>
+
+        <section class="chat-page" id="chat-page">
+          <div class="conversation-header">
+            <div class="conversation-title-area">
+              <div class="conversation-title-row">
+                <h1 id="conversation-title">New conversation</h1>
+                <button class="icon-button title-edit-button" id="edit-title" type="button" aria-label="Edit conversation title" title="Edit conversation title">
+                  <svg><use href="#icon-edit" /></svg>
+                </button>
+              </div>
+              <form class="title-editor" id="title-editor" hidden>
+                <input id="title-input" type="text" maxlength="64" autocomplete="off" aria-label="Conversation title" />
+                <button class="icon-button title-editor-action" id="save-title" type="submit" aria-label="Save conversation title" title="Save title"><svg><use href="#icon-check" /></svg></button>
+                <button class="icon-button title-editor-action" id="cancel-title" type="button" aria-label="Cancel title edit" title="Cancel"><svg><use href="#icon-close" /></svg></button>
+              </form>
+            </div>
+            <div class="conversation-tools">
+              <button class="project-new-chat-button" id="project-new-chat" type="button" aria-label="New chat in project" title="New chat in project" hidden><svg><use href="#icon-plus" /></svg><span>New chat</span></button>
+              <button class="icon-button viewer-toggle" id="open-viewer" type="button" aria-label="Open viewer" title="Open viewer" aria-expanded="false" aria-controls="file-preview"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M14 4v16M14 8h7"/></svg><span class="viewer-tab-count" hidden></span></button>
+              <button class="icon-button" id="pin-chat" type="button" aria-label="Pin conversation" aria-pressed="false" hidden><svg aria-hidden="true"><use href="#icon-pin" /></svg></button>
+              <div class="conversation-menu-wrap">
+                <button class="icon-button conversation-menu-button" id="conversation-menu-button" type="button" aria-label="Chat tools" title="Chat tools" aria-haspopup="menu" aria-expanded="false" aria-controls="conversation-menu"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6"/></svg></button>
+                <div class="conversation-menu" id="conversation-menu" role="menu" aria-label="Chat tools" hidden>
+                  <div id="conversation-manage-actions" role="group" aria-label="Manage conversation" hidden>
+                  <button type="button" id="archive-chat" role="menuitem"><svg><use href="#icon-archive" /></svg><span id="archive-chat-label">Archive</span></button>
+                  <button type="button" id="share-chat" role="menuitem"><svg><use href="#icon-share" /></svg><span>Export</span></button>
+                  <button class="danger" type="button" id="delete-chat" role="menuitem"><svg><use href="#icon-trash" /></svg><span>Delete</span></button>
+                  </div>
+                </div>
+              </div>
+              <button class="icon-button" id="import-chat" aria-label="Import conversation" title="Import conversation" hidden><svg><use href="#icon-import" /></svg></button>
+            </div>
+          </div>
+
+          <div class="messages-wrap" id="messages-wrap">
+            <div class="messages" id="messages" aria-live="polite"></div>
+          </div>
+
+          <button class="jump-to-latest" id="jump-to-latest" type="button" aria-label="Jump to latest message" title="Jump to latest message" aria-hidden="true">
+            <svg><use href="#icon-arrow-down" /></svg>
+          </button>
+
+          <div class="composer-zone">
+            <form class="composer" id="composer">
+              <div class="voice-status" id="voice-status" hidden>
+                <span class="voice-pulse" aria-hidden="true"></span><span id="voice-status-text" role="status" aria-live="polite"></span>
+                <button type="button" id="voice-cancel" aria-label="Cancel dictation" title="Cancel dictation"><svg><use href="#icon-close" /></svg></button>
+              </div>
+              <div class="attachment-list" id="attachment-list" aria-live="polite"></div>
+              <div class="drop-hint" id="drop-hint"><svg><use href="#icon-paperclip" /></svg><span>Drop files to attach</span></div>
+              <div class="composer-input-row">
+                <div class="plus-wrap">
+                  <button class="composer-icon" id="plus-button" type="button" aria-label="Add files or choose a model" title="Add files or choose a model" aria-haspopup="dialog" aria-expanded="false" aria-controls="plus-menu"><svg><use href="#icon-plus" /></svg></button>
+                  <div class="plus-menu" id="plus-menu" role="dialog" aria-label="Message options">
+                    <button class="plus-action" id="upload-files" type="button"><svg><use href="#icon-paperclip" /></svg><span>Upload files</span><kbd>⌘ U</kbd></button>
+                    <input id="file-input" type="file" multiple hidden />
+                    <div class="plus-divider"></div>
+                    <button class="plus-action" id="model-section-button" type="button" aria-expanded="false" aria-controls="model-submenu"><span class="model-status"></span><span class="model-row-copy">Model<small id="model-label">Connecting…</small></span><span aria-hidden="true">›</span></button>
+                    <div id="model-submenu" class="model-submenu" hidden><div class="plus-heading">Choose a model</div><div class="model-menu" id="model-menu" role="listbox" aria-label="Available models"></div></div>
+                  </div>
+                </div>
+                <textarea id="prompt-input" rows="1" placeholder="Message Orbit…" aria-label="Message Orbit"></textarea>
+                <div class="composer-right">
+                  <span class="shortcut-hint">Enter to send · Shift + Enter for new line</span>
+                  <div class="thinking-control" id="thinking-control" hidden>
+                    <button type="button" id="thinking-button" aria-label="Thinking" title="Thinking"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M8 14c-4-4-1.5-11 4-11s8 7 4 11c-1 1-1 2-1 2H9s0-1-1-2Z"/></svg></button>
+                    <div id="thinking-menu" role="dialog" aria-label="Thinking level" hidden>
+                      <div class="thinking-menu-heading"><div><strong id="thinking-level-current">Medium</strong><span id="thinking-model-name"></span></div></div>
+                      <label class="thinking-slider-caption" for="thinking-slider">Thinking level</label>
+                      <input id="thinking-slider" type="range" min="0" max="2" step="1" value="1" aria-label="Thinking level" />
+                      <div class="thinking-slider-labels" aria-hidden="true"><span>Low</span><span>Medium</span><span>High</span></div>
+                    </div>
+                  </div>
+                  <button class="send-button is-voice" id="send-button" type="button" aria-label="Start voice input" title="Checking voice input availability" disabled><svg><use href="#icon-voice" /></svg></button>
+                </div>
+              </div>
+              <p class="voice-service-note" id="voice-service-note" hidden>Your browser’s online speech service transcribes your audio. Review the text before sending.</p>
+            </form>
+            <p class="disclaimer"><svg><use href="#icon-info" /></svg> Models may run locally or online. Responses may still be inaccurate.</p>
+          </div>
+        </section>
+
+        <section class="workspace-page library-page" id="library-page" hidden aria-labelledby="library-title">
+          <div class="workspace-page-inner">
+            <header class="workspace-header">
+              <span class="workspace-icon"><svg><use href="#icon-library" /></svg></span>
+              <div><p class="workspace-eyebrow">Model library</p><h1 id="library-title">Choose how Orbit thinks</h1><p>Copy a command, run it once, and Orbit will discover the model automatically.</p></div>
+            </header>
+            <div id="library-content"></div>
+          </div>
+        </section>
+
+        <section class="workspace-page projects-page" id="projects-page" hidden aria-labelledby="projects-title">
+          <div class="workspace-page-inner">
+            <header class="workspace-header">
+              <span class="workspace-icon"><svg><use href="#icon-projects" /></svg></span>
+              <div><p class="workspace-eyebrow">Projects</p><h1 id="projects-title">Keep related chats together</h1><p>Create a project, then start as many focused conversations inside it as you need.</p></div>
+            </header>
+            <form class="project-create-card" id="project-create-form">
+              <label for="project-name-input">New project</label>
+              <div class="project-create-row">
+                <input id="project-name-input" type="text" maxlength="48" autocomplete="off" placeholder="e.g. DAA lab notes" />
+                <button type="submit"><svg><use href="#icon-plus" /></svg><span>Create</span></button>
+              </div>
+              <p>Projects stay on this device with the rest of your Orbit history.</p>
+            </form>
+            <section class="workspace-collection" aria-labelledby="your-projects-title">
+              <div class="workspace-section-heading"><div><p class="workspace-eyebrow">Workspace</p><h2 id="your-projects-title">Your projects</h2></div><span id="project-count">0 projects</span></div>
+              <div class="project-grid" id="project-grid"></div>
+              <div class="workspace-empty" id="projects-empty"><svg><use href="#icon-folder" /></svg><h3>No projects yet</h3><p>Create one above to group related conversations.</p></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="workspace-page files-page" id="files-page" hidden aria-labelledby="files-title">
+          <div class="workspace-page-inner">
+            <header class="files-library-header">
+              <div>
+                <p class="workspace-eyebrow">Library</p>
+                <h1 id="files-title">Files</h1>
+                <p>Uploaded and generated files across your conversations.</p>
+              </div>
+              <div class="files-library-actions">
+                <label class="files-search" for="files-search-input">
+                  <svg aria-hidden="true"><use href="#icon-search" /></svg>
+                  <input id="files-search-input" type="search" autocomplete="off" placeholder="Search files" />
+                </label>
+                <span id="file-count" class="files-count">0 files</span>
+              </div>
+            </header>
+            <div class="files-source-switch" id="files-source-switch" data-source="my" role="group" aria-label="File source"><span aria-hidden="true"></span><button type="button" data-files-source="my" aria-pressed="true">My files</button><button type="button" data-files-source="orbit" aria-pressed="false">Orbit files</button></div>
+            <div class="files-list-heading" role="row" aria-hidden="true"><span>Name</span><span>Chat</span><span>Last activity</span></div>
+            <div class="files-grid" id="files-grid" role="list"></div>
+            <div class="workspace-empty" id="files-empty"><svg><use href="#icon-files" /></svg><h3>No files yet</h3><p>Attachments you send in a conversation will appear here.</p></div>
+          </div>
+        </section>
+        <section class="workspace-page" id="usage-page" hidden aria-labelledby="usage-title">
+          <div class="workspace-page-inner usage-page-inner">
+            <header class="widget-page-header"><p class="workspace-eyebrow">Last 7 days · this browser</p><h1 id="usage-title">Usage</h1><p>See how your models, thinking modes and web tools are used.</p></header>
+            <div class="usage-filters"><label>Connection <select id="usage-provider"><option value="">All connections</option></select></label><label>Model <select id="usage-model"><option value="">All models</option></select></label><label>Include <select id="usage-scope"><option value="all">All model work</option><option value="chat">Chat replies only</option></select></label><span id="usage-updated" role="status">Loading usage…</span></div>
+            <div id="usage-content" aria-busy="true"></div>
+          </div>
+        </section>
+        <section class="workspace-page" id="widgets-page" hidden aria-labelledby="widgets-title">
+          <div class="workspace-page-inner widgets-page-inner">
+            <header class="widget-page-header"><h1 id="widgets-title">Widgets</h1><p>Turn a conversation into something you can use.</p></header>
+            <div id="widgets-content"></div>
+            <div class="widget-setup"><div><strong>Built in. Yours to keep.</strong><p>Ask for a PDF, Word document, presentation, Excel spreadsheet, chart or diagram in any chat. These tools run on your device; no Python or extra installation is needed. Use a local model for fully offline conversations.</p></div><button id="widget-check" type="button">Check tools</button><p id="widget-check-status" role="status"></p></div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <div class="scrim" id="scrim"></div>
+    <input id="chat-import-input" type="file" accept=".orbit-chat,.orbit-archive,.json,application/json" hidden />
+    <div class="preferences-modal" id="preferences-modal" hidden>
+      <div class="preferences-backdrop" id="preferences-backdrop"></div>
+      <section class="preferences-dialog" role="dialog" aria-modal="true" aria-labelledby="preferences-title">
+        <div class="preferences-header">
+          <div>
+            <p class="eyebrow"><span class="eyebrow-dot"></span> Orbit</p>
+            <h2 id="preferences-title">Settings</h2>
+          </div>
+          <button class="icon-button" id="close-preferences" type="button" aria-label="Close preferences" title="Close preferences"><svg><use href="#icon-close" /></svg></button>
+        </div>
+        <form id="preferences-form">
+          <div class="settings-layout">
+            <nav class="settings-nav" aria-label="Settings sections">
+              <button class="settings-nav-item active" type="button" data-settings-section="name" aria-selected="true">Profile</button>
+              <button class="settings-nav-item" id="local-model-settings-nav" type="button" data-settings-section="models" aria-selected="false">Models</button>
+              <button class="settings-nav-item" type="button" data-settings-section="appearance" aria-selected="false">Appearance</button>
+              <button class="settings-nav-item" type="button" data-settings-section="font" aria-selected="false">Font</button>
+              <button class="settings-nav-item" type="button" data-settings-section="code" aria-selected="false">Code</button>
+              <button class="settings-nav-item" type="button" data-settings-section="chat" aria-selected="false">Chat</button>
+            </nav>
+            <div class="settings-panels">
+              <section class="settings-panel" data-settings-panel="models" hidden>
+                <h3>AICredits · DeepSeek Flash</h3>
+                <p class="settings-panel-description">Use your AICredits wallet with DeepSeek V4.1 Flash, including vision.</p>
+                <div class="preference-field">
+                  <label for="aicredits-api-key">AICredits API key</label>
+                  <input id="aicredits-api-key" type="password" maxlength="512" autocomplete="off" spellcheck="false" placeholder="sk-live-…" />
+                  <p class="settings-hint"><strong>Locked to DeepSeek V4.1 Flash.</strong> Orbit blocks Pro and all other models on this connection. If Flash is unavailable, Orbit stops instead of switching models.</p>
+                  <p class="settings-hint">Your key stays on this computer, outside browser storage and chat exports. Selected messages, attachments and memories are sent through AICredits. Usage is billed to your AICredits wallet.</p>
+                  <p class="settings-hint"><a href="https://aicredits.in/pricing" target="_blank" rel="noopener noreferrer">AICredits pricing and fees</a></p>
+                  <div class="aicredits-settings-actions">
+                    <button class="secondary-button" type="button" id="aicredits-save-key">Save key</button>
+                    <button class="secondary-button" type="button" id="aicredits-check-key">Check connection</button>
+                    <button class="secondary-button" type="button" id="aicredits-remove-key">Remove key</button>
+                  </div>
+                  <p class="settings-hint" id="aicredits-key-status" role="status" aria-live="polite"></p>
+                </div>
+                <h3>DeepSeek · Direct API</h3>
+                <p class="settings-panel-description">Connect your DeepSeek API account. Flash supports text and images; Pro supports text. Available models are checked with DeepSeek.</p>
+                <div class="preference-field">
+                  <label for="deepseek-api-key">DeepSeek API key</label>
+                  <input id="deepseek-api-key" type="password" maxlength="512" autocomplete="off" spellcheck="false" placeholder="Paste a new key" />
+                  <p class="settings-hint">Saved on this computer, outside browser storage and chat exports. When selected, your messages and relevant attachments or memories are sent to DeepSeek.</p>
+                  <p class="settings-hint">API usage is billed to your DeepSeek account. <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">Get an API key</a> · <a href="https://api-docs.deepseek.com/quick_start/pricing/" target="_blank" rel="noopener noreferrer">Current pricing</a></p>
+                  <div class="deepseek-settings-actions">
+                    <button class="secondary-button" type="button" id="deepseek-save-key">Save key</button>
+                    <button class="secondary-button" type="button" id="deepseek-check-key">Check connection</button>
+                    <button class="secondary-button" type="button" id="deepseek-remove-key">Remove key</button>
+                  </div>
+                  <p class="settings-hint" id="deepseek-key-status" role="status" aria-live="polite"></p>
+                </div>
+                <h3>Gemini</h3>
+                <p class="settings-panel-description">Use Gemini alongside your Ollama models. Gemini runs online; your Orbit app stays on this computer.</p>
+                <div class="preference-field">
+                  <label for="gemini-api-key">Gemini API key</label>
+                  <input id="gemini-api-key" type="password" maxlength="512" autocomplete="off" spellcheck="false" placeholder="Paste a new key" />
+                  <p class="settings-hint">Saved on this computer, outside chat exports and browser storage. Your messages and relevant attachments or memories are sent to Google when you select Gemini.</p>
+                  <p class="settings-hint">Use a Google project without paid billing for free-tier use. Orbit lists supported Flash models; Google controls availability and quotas. Free-tier content may be used to improve Google’s products.</p>
+                  <div class="gemini-settings-actions">
+                    <button class="secondary-button" type="button" id="gemini-save-key">Save key</button>
+                    <button class="secondary-button" type="button" id="gemini-check-key">Check connection</button>
+                    <button class="secondary-button" type="button" id="gemini-remove-key">Remove key</button>
+                  </div>
+                  <p class="settings-hint" id="gemini-key-status" role="status" aria-live="polite"></p>
+                </div>
+              </section>
+              <section class="settings-panel active" data-settings-panel="name">
+                <h3>Profile</h3>
+                <p class="settings-panel-description">This name appears beside your account and in your avatar.</p>
+                <div class="preference-field">
+                  <label for="display-name-input">Your name</label>
+                  <input id="display-name-input" name="display-name" type="text" maxlength="32" autocomplete="nickname" placeholder="Your name" />
+                </div>
+                <div class="preference-field">
+                  <label for="about-me-input">About me</label>
+                  <textarea id="about-me-input" rows="4" maxlength="3000" placeholder="What should Orbit know about you? How do you like answers to sound?"></textarea>
+                  <p class="settings-hint">Used by your selected model to personalize replies, even when memories are off.</p>
+                </div>
+                <fieldset class="preference-field memory-settings" id="memory-mode-options">
+                  <legend>Memories</legend>
+                  <div class="memory-mode-options">
+                    <label><input type="radio" name="memory-mode" value="auto" /> Auto</label>
+                    <label><input type="radio" name="memory-mode" value="on" /> On</label>
+                    <label><input type="radio" name="memory-mode" value="off" /> Off</label>
+                  </div>
+                  <p class="settings-hint">Recall summaries and search details from saved chats in this browser, including archives. Orbit also learns your response and document formatting preferences separately from About me. Ask in chat to change or forget them. Auto disables recall and learning for models identified as 3B or smaller. Use a larger model for reliable recall.</p>
+                  <p class="settings-hint">Relevant memory and About me text are sent to your selected model; cloud models receive this context. They are not sent to web search. Deleting a chat removes it from future chat recall; learned preferences stay until you ask Orbit to forget them.</p>
+                  <p class="settings-hint" id="memory-model-status"></p>
+                </fieldset>
+
+                <div class="preference-field">
+                  <label for="default-model-input">Default model</label>
+                  <div class="default-model-picker" id="default-model-picker">
+                    <button id="default-model-input" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="default-model-options" aria-describedby="default-model-help"><span>Last-used model</span><svg aria-hidden="true"><use href="#icon-chevron" /></svg></button>
+                    <div id="default-model-options" role="listbox" aria-label="Default model" hidden></div>
+                  </div>
+                  <p id="default-model-help">Used on each reload. If unavailable after 6 seconds, Orbit uses your last-used model, or another available model.</p>
+                </div>
+                <div class="preference-field">
+                  <label>Accent color</label>
+                  <div class="accent-options" id="accent-options" role="radiogroup" aria-label="Profile accent color">
+                    <button class="accent-option" type="button" data-accent="default" role="radio" aria-label="Default" title="Default"><span class="accent-swatch"></span></button>
+                    <button class="accent-option" type="button" data-accent="blue" role="radio" aria-label="Blue" title="Blue"><span class="accent-swatch"></span></button>
+                    <button class="accent-option" type="button" data-accent="purple" role="radio" aria-label="Purple" title="Purple"><span class="accent-swatch"></span></button>
+                    <button class="accent-option" type="button" data-accent="pink" role="radio" aria-label="Pink" title="Pink"><span class="accent-swatch"></span></button>
+                    <button class="accent-option" type="button" data-accent="red" role="radio" aria-label="Red" title="Red"><span class="accent-swatch"></span></button>
+                    <button class="accent-option" type="button" data-accent="orange" role="radio" aria-label="Orange" title="Orange"><span class="accent-swatch"></span></button>
+                    <button class="accent-option" type="button" data-accent="green" role="radio" aria-label="Green" title="Green"><span class="accent-swatch"></span></button>
+                    <button class="accent-option" type="button" data-accent="teal" role="radio" aria-label="Teal" title="Teal"><span class="accent-swatch"></span></button>
+                  </div>
+                </div>
+              </section>
+              <section class="settings-panel" data-settings-panel="appearance" hidden>
+                <h3>Appearance</h3>
+                <p class="settings-panel-description">Tune surface and text tones separately. Light and dark themes keep separate values.</p>
+                <p class="settings-field-hint surface-tone-theme" id="surface-tone-theme">Adjusting light mode</p>
+                <div class="surface-tone-card">
+                  <div class="preference-field">
+                    <label class="preference-range-label" for="sidebar-tone-input"><span>Sidebar color</span><output id="sidebar-tone-value" for="sidebar-tone-input">Original</output></label>
+                    <input class="preference-range surface-tone-range" id="sidebar-tone-input" name="sidebar-tone" type="range" min="0" max="100" step="5" value="50" />
+                    <div class="preference-range-labels" aria-hidden="true"><span>Darker</span><span>Lighter</span></div>
+                  </div>
+                  <div class="preference-field">
+                    <label class="preference-range-label" for="chat-background-tone-input"><span>Chat background color</span><output id="chat-background-tone-value" for="chat-background-tone-input">Original</output></label>
+                    <input class="preference-range surface-tone-range" id="chat-background-tone-input" name="chat-background-tone" type="range" min="0" max="100" step="5" value="50" />
+                    <div class="preference-range-labels" aria-hidden="true"><span>Darker</span><span>Lighter</span></div>
+                  </div>
+                  <div class="preference-field">
+                    <label class="preference-range-label" for="text-tone-input"><span>Text color</span><output id="text-tone-value" for="text-tone-input">Original</output></label>
+                    <input class="preference-range text-tone-range" id="text-tone-input" name="text-tone" type="range" min="0" max="100" step="5" value="50" />
+                    <div class="preference-range-labels" aria-hidden="true"><span>Blacker</span><span>Whiter</span></div>
+                  </div>
+                </div>
+                <button class="settings-reset-button" id="reset-appearance-settings" type="button">Reset appearance defaults</button>
+              </section>
+              <section class="settings-panel" data-settings-panel="font" hidden>
+                <h3>Font</h3>
+                <p class="settings-panel-description">Tune the reading experience for conversation content.</p>
+                <div class="preference-field">
+                    <label for="chat-font-family-input">Conversation font</label>
+                    <div class="preference-select-wrap">
+                      <select id="chat-font-family-input" name="chat-font-family">
+                      <option value="system">System sans</option>
+                      <option value="orbit">DM Sans · Orbit</option>
+                      <option value="serif">Readable serif</option>
+                      <option value="sohne">Söhne</option>
+                      <option value="sohne-buch">Söhne Buch (installed font)</option>
+                      <option value="sohne-halbfett">Söhne Halbfett (installed font)</option>
+                      <option value="openai-sans">OpenAI Sans (installed font)</option>
+                      <option value="inter">Inter</option>
+                      <option value="plex">IBM Plex Sans</option>
+                      <option value="source">Source Sans 3</option>
+                      <option value="atkinson">Atkinson Hyperlegible</option>
+                      <option value="avenir">Avenir Next</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="preference-field">
+                  <label class="preference-range-label" for="chat-font-size-input"><span>Chat text size</span><output id="chat-font-size-value" for="chat-font-size-input">110%</output></label>
+                  <input class="preference-range" id="chat-font-size-input" name="chat-font-size" type="range" min="90" max="130" step="5" value="110" />
+                  <div class="preference-range-labels" aria-hidden="true"><span>Smaller</span><span>Larger</span></div>
+                </div>
+                <div class="preference-field">
+                  <label class="preference-range-label" for="emoji-size-input"><span>Emoji size</span><output id="emoji-size-value" for="emoji-size-input">100%</output></label>
+                  <input class="preference-range" id="emoji-size-input" name="emoji-size" type="range" min="80" max="140" step="5" value="100" />
+                  <div class="preference-range-labels" aria-hidden="true"><span>Smaller</span><span>Larger</span></div>
+                </div>
+                <button class="settings-reset-button" id="reset-font-settings" type="button">Reset font defaults</button>
+              </section>
+              <section class="settings-panel" data-settings-panel="code" hidden>
+                <h3>Code</h3>
+                <p class="settings-panel-description">Choose how code snippets are displayed in responses.</p>
+                <div class="preference-field">
+                  <label class="preference-range-label" for="code-font-size-input"><span>Code font size</span><output id="code-font-size-value" for="code-font-size-input">100%</output></label>
+                  <input class="preference-range" id="code-font-size-input" name="code-font-size" type="range" min="75" max="150" step="5" value="100" />
+                  <div class="preference-range-labels" aria-hidden="true"><span>Smaller</span><span>Larger</span></div>
+                </div>
+                <label class="settings-switch-row" for="code-line-numbers-input">
+                  <span><strong>Show line numbers</strong><small>Display a number beside every line in code boxes.</small></span>
+                  <input id="code-line-numbers-input" type="checkbox" />
+                </label>
+                <label class="settings-switch-row" for="code-aura-input">
+                  <span><strong>Code box aura</strong><small>Add the soft shadow around code boxes.</small></span>
+                  <input id="code-aura-input" type="checkbox" />
+                </label>
+                <div class="code-colors-group">
+                  <div class="preference-field code-color-field">
+                    <label class="preference-color-label" for="code-light-color-input"><span>Light mode code background</span><output id="code-light-color-value" for="code-light-color-input">#F8F8F8</output></label>
+                    <label class="preference-color-picker" for="code-light-color-input" style="--picker-color: #f8f8f8;" aria-label="Change light mode code background color">
+                      <input class="preference-color-input" id="code-light-color-input" type="color" value="#f8f8f8" />
+                      <span>Click to change color</span>
+                    </label>
+                  </div>
+                  <div class="preference-field code-color-field">
+                    <label class="preference-color-label" for="code-dark-color-input"><span>Dark mode code background</span><output id="code-dark-color-value" for="code-dark-color-input">#212121</output></label>
+                    <label class="preference-color-picker" for="code-dark-color-input" style="--picker-color: #212121;" aria-label="Change dark mode code background color">
+                      <input class="preference-color-input" id="code-dark-color-input" type="color" value="#212121" />
+                      <span>Click to change color</span>
+                    </label>
+                  </div>
+                </div>
+                <button class="settings-reset-button" id="reset-code-settings" type="button">Reset code defaults</button>
+              </section>
+              <section class="settings-panel" data-settings-panel="chat" hidden>
+                <h3>Chat</h3>
+                <p class="settings-panel-description">Personalize message accents, input styling, move conversations between Orbit installations, or clear local history.</p>
+                <div class="preference-field">
+                  <label>Message accent</label>
+                  <p class="settings-field-hint">Changes your message pill and the send arrow button.</p>
+                  <div class="accent-options chat-accent-options" id="chat-accent-options" role="radiogroup" aria-label="Chat message accent">
+                    <button class="chat-accent-option" type="button" data-chat-accent="default-light" role="radio" aria-label="Light mode default" title="Light mode default"><span class="accent-swatch"></span></button>
+                    <button class="chat-accent-option" type="button" data-chat-accent="default-dark" role="radio" aria-label="Dark mode default" title="Dark mode default"><span class="accent-swatch"></span></button>
+                    <button class="chat-accent-option" type="button" data-chat-accent="ocean" role="radio" aria-label="Ocean" title="Ocean"><span class="accent-swatch"></span></button>
+                    <button class="chat-accent-option" type="button" data-chat-accent="violet" role="radio" aria-label="Violet" title="Violet"><span class="accent-swatch"></span></button>
+                    <button class="chat-accent-option" type="button" data-chat-accent="rose" role="radio" aria-label="Rose" title="Rose"><span class="accent-swatch"></span></button>
+                    <button class="chat-accent-option" type="button" data-chat-accent="coral" role="radio" aria-label="Coral" title="Coral"><span class="accent-swatch"></span></button>
+                    <button class="chat-accent-option" type="button" data-chat-accent="emerald" role="radio" aria-label="Emerald" title="Emerald"><span class="accent-swatch"></span></button>
+                    <button class="chat-accent-option" type="button" data-chat-accent="teal" role="radio" aria-label="Teal" title="Teal"><span class="accent-swatch"></span></button>
+                    <button class="chat-accent-option" type="button" data-chat-accent="sky" role="radio" aria-label="Sky" title="Sky"><span class="accent-swatch"></span></button>
+                    <button class="chat-accent-option" type="button" data-chat-accent="gold" role="radio" aria-label="Gold" title="Gold"><span class="accent-swatch"></span></button>
+                  </div>
+                </div>
+                <div class="preference-field">
+                  <label class="preference-range-label" for="chat-width-input"><span>Chat width</span><output id="chat-width-value" for="chat-width-input">960px</output></label>
+                  <input class="preference-range" id="chat-width-input" name="chat-width" type="range" min="760" max="1200" step="20" value="960" />
+                  <div class="preference-range-labels" aria-hidden="true"><span>More compact</span><span>Wider</span></div>
+                </div>
+                <div class="preference-field">
+                  <label for="voice-language-input">Voice input accent</label>
+                  <select id="voice-language-input"><option value="en-IN">English (India)</option><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option><option value="en-AU">English (Australia)</option></select>
+                  <p class="preference-hint">Online dictation uses your browser’s speech service. Audio goes to that service; Orbit receives text. Text stays in the input until you send it.</p>
+                </div>
+                <div class="preference-field">
+                  <label class="preference-range-label" for="generation-indicator-size-input"><span>Generating dot size</span><output id="generation-indicator-size-value" for="generation-indicator-size-input">110%</output></label>
+                  <input class="preference-range" id="generation-indicator-size-input" name="generation-indicator-size" type="range" min="80" max="150" step="5" value="110" />
+                  <div class="preference-range-labels" aria-hidden="true"><span>Smaller</span><span>Larger</span></div>
+                </div>
+                <label class="settings-switch-row" for="chat-content-boundaries-input">
+                  <span><strong>Content boundaries</strong><small>Show subtle outer outlines around code blocks and tables.</small></span>
+                  <input id="chat-content-boundaries-input" type="checkbox" />
+                </label>
+                <label class="settings-switch-row" for="chat-composer-border-input">
+                  <span><strong>Message borders</strong><small>Show subtle outlines around the message input and your sent messages.</small></span>
+                  <input id="chat-composer-border-input" type="checkbox" />
+                </label>
+                <label class="settings-switch-row" for="chat-composer-aura-input">
+                  <span><strong>Message input aura</strong><small>Add a soft shadow around the message input pill.</small></span>
+                  <input id="chat-composer-aura-input" type="checkbox" />
+                </label>
+                <button class="settings-reset-button" id="reset-chat-settings" type="button">Reset chat defaults</button>
+                <div class="settings-action-list">
+                  <button class="settings-action" id="export-all-chats" type="button"><svg><use href="#icon-share" /></svg><span><strong>Export all chats</strong><small>Download one portable Orbit archive.</small></span></button>
+                  <button class="settings-action" id="import-chat-settings" type="button"><svg><use href="#icon-import" /></svg><span><strong>Import a chat</strong><small>Open an .orbit-chat file without adding it to history yet.</small></span></button>
+                  <button class="settings-action danger" id="delete-all-chats" type="button"><svg><use href="#icon-trash" /></svg><span><strong>Delete all chats</strong><small>Remove every saved local conversation.</small></span></button>
+                </div>
+              </section>
+            </div>
+          </div>
+          <div class="preferences-actions">
+            <button class="preferences-button secondary" id="cancel-preferences" type="button">Cancel</button>
+            <button class="preferences-button primary" type="submit">Save changes</button>
+          </div>
+        </form>
+      </section>
+    </div>
+    <div class="confirmation-modal" id="confirmation-modal" hidden>
+      <div class="confirmation-backdrop" id="confirmation-backdrop"></div>
+      <section class="confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmation-title" aria-describedby="confirmation-message">
+        <div class="confirmation-icon" aria-hidden="true"><svg><use href="#icon-trash" /></svg></div>
+        <h2 id="confirmation-title">Delete this conversation?</h2>
+        <p id="confirmation-message">Are you sure you want to delete this conversation? This cannot be undone.</p>
+        <div class="confirmation-actions">
+          <button class="preferences-button secondary" id="confirmation-cancel" type="button">Cancel</button>
+          <button class="preferences-button danger" id="confirmation-confirm" type="button">Delete chat</button>
+        </div>
+      </section>
+    </div>
+    <div class="project-rename-modal" id="project-rename-modal" hidden>
+      <div class="project-rename-backdrop" id="project-rename-backdrop"></div>
+      <section class="project-rename-dialog" role="dialog" aria-modal="true" aria-labelledby="project-rename-title">
+        <form id="project-rename-form">
+          <span class="project-rename-icon" aria-hidden="true"><svg><use href="#icon-folder" /></svg></span>
+          <h2 id="project-rename-title">Rename project</h2>
+          <label for="project-rename-input">Project name</label>
+          <input id="project-rename-input" type="text" maxlength="48" autocomplete="off" />
+          <p>Its conversations and files will stay exactly where they are.</p>
+          <div class="project-rename-actions">
+            <button class="preferences-button secondary" id="project-rename-cancel" type="button">Cancel</button>
+            <button class="preferences-button primary" type="submit">Save name</button>
+          </div>
+        </form>
+      </section>
+    </div>
+    <div class="toast" id="toast" role="status"></div>
+    <script src="vendor/katex/katex.min.js"></script>
+    <script src="charts.js?v=3"></script>
+    <script src="archives.js?v=2"></script>
+    <script src="widgets.js?v=57"></script>
+    <script src="web-tools.js?v=13"></script>
+    <script src="widgets-ui.js?v=37"></script>
+    <script src="thinking.js?v=10"></script>
+    <script src="voice.js?v=1"></script>
+    <script src="usage.js?v=3"></script>
+    <script src="document-assets.js?v=7"></script>
+    <script src="document-edits.js?v=2"></script>
+    <script src="long-documents.js?v=13"></script>
+    <script src="analyze.js?v=11"></script>
+    <script src="memories.js?v=7"></script>
+    <script src="chat-store.js?v=6"></script>
+    <script src="boot.js?v=56"></script>
+  </body>
+</html>
