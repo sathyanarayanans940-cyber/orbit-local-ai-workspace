@@ -1,0 +1,4 @@
+{
+  "suffixes": "0: BANANA$\n1: ANANA$\n2: NANA$\n3: ANA$\n4: NA$\n5: A$\n6: $",
+  "tree": "ROOT\n|-- $ [suffix at 6]\n|-- A\n|   |-- $ [suffix at 5]\n|   |-- NA\n|       |-- $ [suffix at 3]\n|       |-- NA$ [suffix at 1]\n|-- BANANA$ [suffix at 0]\n|-- NA\n    |-- $ [suffix at 4]\n    |-- NA$ [suffix at 2]"
+}

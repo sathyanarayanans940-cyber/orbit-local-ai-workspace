@@ -8,6 +8,18 @@ const renderer = vm.createContext({ window: { katex }, icons: { copy: '' }, stat
 vm.runInContext(source.slice(source.indexOf('function escapeHtml('), source.indexOf('function latestUserMessageIndex(')), renderer);
 require('./interaction-harness.cjs')(renderer);
 const render = (text) => renderer.renderRichText(text, 0);
+test('plain BANANA fences survive widget extraction and saved/streaming message rendering',()=>{
+ const {suffixes,tree}=require('./fixtures/plain-fences.json');
+ const text='Suffixes:\n```\n'+suffixes+'\n```\n\nThe tree:\n```\n'+tree+'\n```';
+ for(const generating of [false,true]){
+  const message={role:'assistant',text,generating};
+  const before=JSON.stringify(message),html=renderer.messageContentMarkup(message,0);
+  assert.equal((html.match(/class="code-content"/g)||[]).length,2);
+  assert.doesNotMatch(html,/```|class="katex/);
+  assert.match(html.replace(/<[^>]*>/g,''),/\|   \|/);
+  assert.equal(JSON.stringify(message),before);
+ }
+});
 test('saved repaired PDF displays its download card without the old malformed draft',()=>{
  const fixture=require('./fixtures/pdf-draft-leak.json'),message=JSON.parse(JSON.stringify(fixture));
  const before=JSON.stringify(message),html=renderer.messageContentMarkup(message,0);

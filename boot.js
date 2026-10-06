@@ -10,7 +10,7 @@
     await load('workspace-core.js?v=2');
     await load('workspace-budget.js?v=1');
     await load('document-history.js?v=1');
-    await load('app.js?v=249');
+    await load('app.js?v=250');
     await load('file-preview.js?v=24');
     await load('workspace-tools.js?v=3');
     initWidgetUi();

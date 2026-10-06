@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Orbit plain fence regression</title>
+<link rel="stylesheet" href="../styles.css">
+<style>html,body{height:auto;overflow:auto}body{padding:24px}main{max-width:850px;margin:auto}.message.assistant .message-body{max-width:100%}.message{animation:none}</style>
+<main><p id="status">Checking production renderer…</p><article class="message assistant"><div class="message-body"><div class="message-text" id="preview"></div></div></article></main>
+<script>
+Promise.all([fetch('../app.js').then(r=>r.text()),fetch('./fixtures/plain-fences.json').then(r=>r.json())]).then(([source,fixture])=>{
+ const slice=source.slice(source.indexOf('function escapeHtml('),source.indexOf('function latestUserMessageIndex('));
+ const render=new Function('window','icons','state',slice+';return renderRichText;')(window,{copy:'Copy'},{currentChat:'preview'});
+ const {suffixes,tree}=fixture;
+ const text='# Dry run on BANANA\n\nText = `BANANA` → add `$` → `BANANA$` (length 7). Suffixes:\n\n```\n'+suffixes+'\n```\n\nThe tree:\n\n```\n'+tree+'\n```';
+ const preview=document.querySelector('#preview');preview.innerHTML=render(text,0);
+ const code=[...preview.querySelectorAll('.code-content')];
+ const checks=[code.length===2,code[0]?.textContent===suffixes,code[1]?.textContent===tree,code.every(el=>getComputedStyle(el).whiteSpace==='pre'),!preview.textContent.includes('```')];
+ document.querySelector('#status').textContent=checks.every(Boolean)?'PASS — both blocks preserve exact text, indentation and preformatted layout.':'FAIL — '+JSON.stringify(checks);
+}).catch(error=>document.querySelector('#status').textContent='FAIL — '+error.message);
+</script>
+</html>

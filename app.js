@@ -1253,33 +1253,6 @@ function appendGenerationIndicator(content) {
   return `${content}${indicator}`;
 }
 
-const CODE_FENCE_LANGUAGES = new Set('text plaintext txt md markdown tex latex c cpp c++ h hpp objc objective-c cs csharp java kotlin scala swift rust go ts typescript tsx js javascript jsx json yaml yml html xml css sql mysql postgres postgresql bash shell sh zsh fish powershell ps1 cmd bat dockerfile python py ruby rb php perl lua r dart elixir erlang haskell matlab groovy nginx apache makefile cmake'.split(' '));
-
-function isKnownCodeFenceLanguage(language) {
-  return CODE_FENCE_LANGUAGES.has(String(language || '').trim().toLowerCase());
-}
-
-function looksLikeCodeFenceContent(lines) {
-  return lines.some((line) => {
-    const source = String(line).trim();
-    if (!source) return false;
-    if (/^(?:#!|#include\b|\/\/|\/\*|\*\/|<!--|-->)[\s\S]*/.test(source)) return true;
-    if (/^<\/?[A-Za-z][^>]*>/.test(source) || /^@[A-Za-z_]/.test(source) || /^\$\s*[A-Za-z_]/.test(source)) return true;
-    if (/^[{}[\]();]/.test(source) || /[{}]$/.test(source)) return true;
-    if (/^(?:const|let|var|function|class|interface|struct|enum|typedef|using|namespace|import|export|from|def|async|await|return|if|else|for|while|switch|case|try|catch|finally|throw|fn|func|package|public|private|protected|static|auto|bool|boolean|byte|char|double|float|int|long|short|signed|string|uint|ulong|unsigned|void|wchar_t|SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|echo|printf|print|console\.|curl|ollama|git|npm|pip)\b/i.test(source)) return true;
-    if (/^(?:print|printf|puts|echo|scanf|input|alert|console\.(?:log|error|warn)|document\.)\s*\(/.test(source)) return true;
-    if (/^[A-Za-z_$][\w$]*(?:\s*\[[^\]]+\])?\s*=\s*(?!=)/.test(source)) return true;
-    if (/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+\s*\(/.test(source)) return true;
-    if (/^[A-Za-z_$][\w$]*\s*(?:=>|::)/.test(source)) return true;
-    return false;
-  });
-}
-
-function shouldOpenCodeFence(candidate) {
-  return Boolean(candidate?.hasExplicitLanguage && isKnownCodeFenceLanguage(candidate.language))
-    || looksLikeCodeFenceContent(candidate?.lines || []);
-}
-
 function resolveSourceCitations(text, sources = []) {
   // Only resolve titles against this reply's actual sources; never guess a URL.
   const normalize = value => String(value).normalize('NFKC').replace(/[–—−]/g, '-').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -1305,7 +1278,6 @@ function renderRichText(text, messageIndex, { streaming = false, inferDisplayMat
   let normalLines = [];
   let codeLines = [];
   let activeFence = null;
-  let candidateFence = null;
   let blockIndex = 0;
   const flushNormal = () => {
     const normal = normalLines.join('\n').trim();
@@ -1321,17 +1293,6 @@ function renderRichText(text, messageIndex, { streaming = false, inferDisplayMat
     blockIndex += 1;
     codeLines = [];
   };
-  const activateCandidate = () => {
-    flushNormal();
-    activeFence = candidateFence;
-    codeLines = activeFence.lines;
-    candidateFence = null;
-  };
-  const keepCandidateAsText = (extraLines = []) => {
-    normalLines.push(candidateFence.openingLine, ...candidateFence.lines, ...extraLines);
-    candidateFence = null;
-  };
-
   lines.forEach((line) => {
     if (activeFence) {
       const closing = new RegExp(`^ {0,3}${activeFence.character}{${activeFence.length},}\\s*$`).test(line);
@@ -1340,60 +1301,29 @@ function renderRichText(text, messageIndex, { streaming = false, inferDisplayMat
         activeFence = null;
         return;
       }
-      codeLines.push(line);
+      codeLines.push(line.replace(new RegExp(`^ {0,${activeFence.indent}}`), ''));
       return;
     }
 
-    if (candidateFence) {
-      const closing = new RegExp(`^ {0,3}${candidateFence.character}{${candidateFence.length},}\\s*$`).test(line);
-      if (closing) {
-        if (shouldOpenCodeFence(candidateFence)) {
-          activateCandidate();
-          flushCode(false);
-          activeFence = null;
-        } else {
-          keepCandidateAsText([line]);
-        }
-        return;
-      }
-      candidateFence.lines.push(line);
-      if (shouldOpenCodeFence(candidateFence)) activateCandidate();
+    // Fences declare literal content, even with no language or no code-like
+    // tokens (trees, terminal output, sample data and unknown languages).
+    // Backtick info strings cannot contain backticks; this also keeps inline
+    // delimiter examples from swallowing the rest of a message.
+    const opening = line.match(/^( {0,3})(`{3,}|~{3,})(.*)$/);
+    if (opening && !(opening[2][0] === '`' && opening[3].includes('`'))) {
+      flushNormal();
+      activeFence = {
+        character: opening[2][0],
+        length: opening[2].length,
+        indent: opening[1].length,
+        language: opening[3].trim().split(/\s+/)[0] || 'text',
+      };
       return;
     }
-
-    {
-      // Recognize standard fenced blocks at the start of a line. This also
-      // recognizes a just-arrived opening fence with a known language before
-      // its closing fence is streamed, so real code gets its container
-      // immediately. Unlabeled fences wait for code-like content to avoid
-      // turning ordinary prose that mentions a delimiter into a code box.
-      const opening = line.match(/^ {0,3}(`{3,}|~{3,})([^\s`~]*)[^\r]*$/);
-      if (opening) {
-        candidateFence = {
-          character: opening[1][0],
-          length: opening[1].length,
-          openingLine: line,
-          hasExplicitLanguage: Boolean(opening[2]),
-          language: opening[2] || 'text',
-          lines: [],
-        };
-        if (candidateFence.hasExplicitLanguage && isKnownCodeFenceLanguage(candidateFence.language)) activateCandidate();
-        return;
-      }
-      normalLines.push(line);
-    }
+    normalLines.push(line);
   });
 
-  if (candidateFence) {
-    if (shouldOpenCodeFence(candidateFence)) {
-      activateCandidate();
-      flushCode(streaming);
-    } else {
-      keepCandidateAsText();
-    }
-  } else if (activeFence) {
-    flushCode(streaming);
-  }
+  if (activeFence) flushCode(streaming);
   flushNormal();
   return result || renderMarkdownBlocks(inferDisplayMath?formatWorkedDisplayMath(text,compactMath):text, { inferDisplayMath });
 }
