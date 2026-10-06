@@ -194,7 +194,7 @@ test('computational verification honors the selected thinking effort while tool 
   const body=r.request().body;
   if(provider==='AICredits')assert.equal(body.reasoning_effort,stage==='analyzing'&&effort==='high'?'high':'none');
   else assert.equal(body.thinking.type,stage==='analyzing'&&effort==='high'?'enabled':'disabled');
-  assert.equal(body.response_format.type,'json_object');assert.equal(body.max_tokens,16384);
+  assert.equal(body.response_format.type,'json_object');assert.equal(body.max_tokens,stage==='analyzing'&&effort==='high'?65536:16384);
   r.send({choices:[{delta:{content:'{"action":"done"}'},finish_reason:'stop'}]});r.close();await reply;
  }
 });
@@ -214,6 +214,36 @@ test('reasoning verification can stream past 90 seconds while Off keeps its shor
   r.send({choices:[{delta:{content:'Complete explanation'},finish_reason:'stop'}]});r.close();
   assert.equal((await pending).text,'Complete explanation');assert.equal(r.timers.size,0);
  }
+});
+
+test('Analyze forwards live thinking activity without leaking its JSON into the visible answer',async()=>{
+ const r=runtime('DeepSeek'),statuses=[],activities=[],tokens=[];
+ r.context.state.models[0].id='deepseek-flash';
+ vm.runInContext(fs.readFileSync(require.resolve('../thinking.js'),'utf8'),r.context);
+ vm.runInContext(fs.readFileSync(require.resolve('../analyze.js'),'utf8'),r.context);
+ const analyze=r.context.OrbitAnalyze.analyze;
+ r.context.OrbitAnalyze.analyze=(messages,options)=>analyze(messages,{...options,run:async()=>({ok:true,output:'Verified result 42'})});
+ const pending=r.context.requestLocalReply('Solve this',[{role:'user',text:'Solve this'}],{widgets:true,onStatus:s=>statuses.push(s),onThinkingActivity:s=>activities.push(s),onToken:s=>tokens.push(s)});
+ await flush();assert.equal(r.request().body.reasoning_effort,'high');assert.equal(r.request().body.max_tokens,65536);
+ r.send({choices:[{delta:{reasoning_content:'Calculating regression equation values'}}]});await flush();
+ assert.ok(statuses.includes('Thinking'));assert.ok(activities.length);assert.deepEqual(tokens,[]);
+ r.send({choices:[{delta:{content:'{"action":"run","complete":true,"code":"print(42)"}'},finish_reason:'stop'}]});r.close();await flush();
+ assert.equal(r.request().body.response_format,undefined);assert.equal(r.request().body.reasoning_effort,'high');
+ assert.match(r.request().body.messages[0].content,/Verified result 42/);
+ r.send({choices:[{delta:{content:'Full worked answer'},finish_reason:'stop'}]});r.close();await pending;
+ assert.deepEqual(tokens,['Full worked answer']);
+ assert.deepEqual(Array.from(r.context.state.runtimeDiagnostics,x=>x.stage),['analysis','preparation','answer']);
+});
+
+test('a truncated thinking pass still records content-free failed-stage timing',async()=>{
+ const r=runtime('DeepSeek');
+ const pending=r.context.requestLocalReply('PRIVATE prompt',[],{analyzing:true});
+ const rejected=assert.rejects(pending,/output or context limit/);
+ await flush();r.send({choices:[{delta:{reasoning_content:'PRIVATE reasoning'}}]});
+ r.send({choices:[{delta:{content:'PRIVATE partial JSON'},finish_reason:'length'}]});r.close();await rejected;
+ const diagnostics=r.context.state.runtimeDiagnostics;
+ assert.equal(diagnostics.at(-1).stage,'analysis');assert.equal(diagnostics.at(-1).outcome,'failed');
+ assert.notEqual(diagnostics.at(-1).firstThinkingMs,null);assert.doesNotMatch(JSON.stringify(diagnostics),/PRIVATE/);
 });
 test('thinking status requires actual reasoning and ignored off controls disappear',async()=>{
  const r=runtime(),statuses=[];r.context.localStorage={getItem:()=>'{"model":false}'};

@@ -1,9 +1,9 @@
-const CACHE_NAME = 'orbit-shell-v314';
+const CACHE_NAME = 'orbit-shell-v315';
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css?v=202',
-  './boot.js?v=56',
+  './boot.js?v=57',
   './workspace-core.js?v=2',
   './workspace-budget.js?v=1',
   './document-history.js?v=1',
@@ -13,10 +13,10 @@ const APP_SHELL = [
   './long-documents.js?v=13',
   './analyze-sandbox.html',
   './chat-store.js?v=6',
-  './analyze.js?v=11',
-  './analyze-worker.js?v=1',
+  './analyze.js?v=12',
+  './analyze-worker.js?v=2',
   './memories.js?v=7',
-  './app.js?v=248',
+  './app.js?v=249',
   './file-preview.js?v=24',
   './vendor/sheetjs/xlsx.full.min.js',
   './thinking.js?v=10',

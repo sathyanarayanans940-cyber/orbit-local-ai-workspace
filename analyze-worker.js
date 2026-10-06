@@ -19,7 +19,9 @@ self.onmessage = async ({data}) => {
     await python.loadPackage(['numpy','scipy','sympy','mpmath']);
     output='';
     // No inherited globals or prior chat data enter the execution namespace.
-    const scope=python.toPy({});
+    // Execute as a script. An empty globals dict resolves __name__ from
+    // builtins, silently skipping the standard Python main guard.
+    const scope=python.toPy({__name__:'__main__'});
     try {const result=await python.runPythonAsync(data.code,{globals:scope});if(result!==undefined&&result!==null)append(String(result));result?.destroy?.();}
     finally{scope.destroy();}
     send({type:'result',ok:true,output,truncated});

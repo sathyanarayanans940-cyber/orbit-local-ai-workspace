@@ -145,6 +145,29 @@ class EndpointTests(DeepSeekEndpoints):
                 code,body=self.request('POST','/api/aicredits/chat',{'model':model,'messages':[{'role':'user','content':'Hello'}]})
                 self.assertEqual(code,400);self.assertIn(b'restricted',body);connect.assert_not_called()
 
+    def test_completed_stream_releases_slot_without_waiting_for_eof(self):
+        self.gateway.save(KEY)
+        for tail in [b'data: [DONE]\n\n', b'data: {"choices":[],"usage":{"total_tokens":12}}\n\n']:
+            final = b'data: {"choices":[{"delta":{"content":"Complete"},"finish_reason":"stop"}]}\n\n'
+            response = Mock(); response.getheader.return_value = 'text/event-stream'
+            response.read1.side_effect = [final, tail[:9], tail[9:], AssertionError('Waited for socket EOF')]
+            connection = Mock()
+            with patch.object(self.gateway, 'connect', return_value=(connection,response)):
+                self.assertEqual(self.request('POST','/api/aicredits/chat',{'model':MODEL,'messages':[{'role':'user','content':'Test'}]}), (200,final+tail))
+            self.assertEqual(response.read1.call_count,3);connection.close.assert_called_once()
+        for _ in range(3): self.assertTrue(self.gateway.slots.acquire(blocking=False))
+        self.assertFalse(self.gateway.slots.acquire(blocking=False))
+
+    def test_usage_timeout_after_finish_does_not_invent_usage_or_completion(self):
+        self.gateway.save(KEY)
+        final = b'data: {"choices":[{"delta":{"content":"Complete"},"finish_reason":"stop"}]}\n\n'
+        response = Mock(); response.getheader.return_value = 'text/event-stream'
+        response.read1.side_effect = [final, TimeoutError()]
+        connection = Mock()
+        with patch.object(self.gateway,'connect',return_value=(connection,response)):
+            self.assertEqual(self.request('POST','/api/aicredits/chat',{'model':MODEL,'messages':[{'role':'user','content':'Test'}]}), (200,final))
+        connection.sock.settimeout.assert_called_with(3)
+
 # Do not run the imported base class a second time in unittest discovery.
 del DeepSeekEndpoints
 if __name__=='__main__':unittest.main()

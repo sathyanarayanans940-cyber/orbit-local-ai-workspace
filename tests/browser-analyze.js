@@ -8,6 +8,8 @@ document.querySelector('#run').onclick=async()=>{
 
 // Additional controls exercise the real isolated worker, not mocks.
 const cases=[
+ ['Python main guard',`def main():\n    print('MAIN_GUARD_RAN')\nif __name__ == '__main__':\n    main()`],
+ ['Guarded failure',`if __name__ == '__main__':\n    raise AssertionError('GUARDED_FAILURE_RAN')`],
  ['Algorithm boundaries',`def search(a,x):\n    lo,hi=0,len(a)\n    while lo<hi:\n        m=(lo+hi)//2\n        if a[m]<x: lo=m+1\n        else: hi=m\n    return lo\nimport bisect,random\nr=random.Random(42)\nfor n in range(100):\n    a=sorted(r.randrange(-20,20) for _ in range(n))\n    for x in range(-25,25): assert search(a,x)==bisect.bisect_left(a,x)\nprint('5000 reference comparisons passed; includes empty, duplicates and absent values')`],
  ['Deliberate wrong answer',`assert 2+2==5, 'Expected failure caught'`],
  ['Syntax failure',`def broken(:\n    pass`],
@@ -22,7 +24,7 @@ const all=document.createElement('button');all.textContent='Run all regression c
  const out=document.querySelector('#result');out.textContent='Running…';const results=[];
  for(const [name,code,timeout] of cases){
   out.textContent=JSON.stringify(results,null,2)+'\nAnalyzing: '+name;
-  try{const value=await OrbitAnalyze.execute(code,{timeout});const expectedFailure=['Deliberate wrong answer','Syntax failure','Infinite loop timeout'].includes(name);const passed=expectedFailure?!value.ok:name==='Output limit'?value.ok&&value.truncated&&value.output.length<=16000:value.ok;results.push({name,passed,...value,output:value.output?.slice(0,600)});}catch(e){results.push({name,passed:false,error:e.message});}
+  try{const value=await OrbitAnalyze.execute(code,{timeout});const expectedFailure=['Guarded failure','Deliberate wrong answer','Syntax failure','Infinite loop timeout'].includes(name);const passed=name==='Python main guard'?value.ok&&value.output.includes('MAIN_GUARD_RAN'):expectedFailure?!value.ok:name==='Output limit'?value.ok&&value.truncated&&value.output.length<=16000:value.ok;results.push({name,passed,...value,output:value.output?.slice(0,600)});}catch(e){results.push({name,passed:false,error:e.message});}
  }
  const c=new AbortController();const running=OrbitAnalyze.execute('while True: pass',{signal:c.signal});setTimeout(()=>c.abort(),500);try{await running;results.push({name:'Cancellation',passed:false})}catch(e){results.push({name:'Cancellation',passed:e.name==='AbortError'})}
  results.push({name:'Worker cleanup',passed:document.querySelectorAll('iframe').length===0});

@@ -4332,7 +4332,7 @@ async function requestLocalReply(prompt, conversation = state.messages, callback
         if(signal.aborted)controller.abort();
         const planningTimeout=typeof OrbitThinking!=='undefined'&&OrbitThinking.status(selected)?300000:90000;
         const timer=setTimeout(abort,planningTimeout);
-        try{return (await requestLocalReply('',messages,{analyzing:true,signal:controller.signal})).text;}
+        try{return (await requestLocalReply('',messages,{analyzing:true,modelOverride:selected.key,signal:controller.signal,onStatus,onThinkingActivity:callbacks.onThinkingActivity})).text;}
         catch(error){if(signal.aborted)throw error;if(controller.signal.aborted)throw new Error('Analyze planning timed out; no computational verification was completed.');throw error;}
         finally{clearTimeout(timer);signal.removeEventListener('abort',abort);}
       }
@@ -4440,10 +4440,13 @@ async function requestLocalReply(prompt, conversation = state.messages, callback
   }
   const gemini = selected.provider === 'Gemini';
   const endpoints = runtimeEndpoints[selected.provider];
+  // DeepSeek counts reasoning and JSON in the same output budget. The old
+  // 16K Analyze cap could cut off its code after a long High reasoning pass.
+  const reasoningAnalysis = callbacks.analyzing && (thinkingOptions.thinking?.type==='enabled' || ['low','high','max'].includes(thinkingOptions.reasoning_effort));
   const extra = selected.provider === 'AICredits'
-    ? {...thinkingOptions, max_tokens: callbacks.naming ? 256 : callbacks.planning || callbacks.repairing || callbacks.editing || callbacks.analyzing || callbacks.drafting ? 16384 : 65536}
+    ? {...thinkingOptions, max_tokens: callbacks.naming ? 256 : callbacks.planning || callbacks.repairing || callbacks.editing || (callbacks.analyzing && !reasoningAnalysis) || callbacks.drafting ? 16384 : 65536}
     : selected.provider === 'DeepSeek'
-    ? {...thinkingOptions, ...(callbacks.naming ? {max_tokens:256} : callbacks.planning || callbacks.repairing || callbacks.editing || callbacks.analyzing || callbacks.drafting ? {max_tokens:16384} : {max_tokens:65536})}
+    ? {...thinkingOptions, ...(callbacks.naming ? {max_tokens:256} : callbacks.planning || callbacks.repairing || callbacks.editing || (callbacks.analyzing && !reasoningAnalysis) || callbacks.drafting ? {max_tokens:16384} : {max_tokens:65536})}
     : gemini
     ? {...thinkingOptions, ...(callbacks.naming ? {max_tokens:256} : callbacks.planning || callbacks.editing || callbacks.analyzing || callbacks.drafting ? {max_tokens:8192} : {})}
     : {temperature: callbacks.naming || callbacks.planning || callbacks.repairing || callbacks.editing || callbacks.analyzing || callbacks.drafting?0:0.7, ...(callbacks.naming || callbacks.widgets || callbacks.planning || callbacks.repairing || callbacks.editing || callbacks.analyzing || callbacks.drafting ? {max_tokens:callbacks.naming?256:callbacks.analyzing||callbacks.drafting?8192:callbacks.planning?1024:-1} : {})};
@@ -4451,13 +4454,19 @@ async function requestLocalReply(prompt, conversation = state.messages, callback
   if (selected.provider === 'DeepSeek' && callbacks.widgets) callbacks.onStatus?.(typeof OrbitThinking!=='undefined' && OrbitThinking.status(selected) || 'Waiting for DeepSeek');
   const response = await requestRuntime(endpoints.chat, { method: 'POST', headers: { 'Content-Type': 'application/json', ...endpoints.headers }, body: JSON.stringify({ model: selected.id, messages: openAiHistory, stream: true, stream_options:{include_usage:true}, ...extra, ...(callbacks.structured || callbacks.planning || callbacks.repairing || callbacks.editing || callbacks.analyzing || callbacks.drafting?{response_format:{type:'json_object'}}:{}) }), signal: callbacks.signal }, selected.provider,usageMetadata);
   const headersAt=Date.now();
-  let firstTextAt, firstThinkingAt;
-  const result=await readRuntimeStream(response, selected.provider, {...callbacks,
-    onToken:token=>{firstTextAt??=Date.now();callbacks.onToken?.(token);},
-    onThinking:()=>{firstThinkingAt??=Date.now();callbacks.onThinking?.();},
-  });
-  recordRuntimeTiming({provider:selected.provider,stage:callbacks.naming?'title':callbacks.editing?'document-edit':callbacks.repairing?'repair':callbacks.analyzing?'analysis':callbacks.drafting?'document':callbacks.planning?'planning':'answer',responseMs:headersAt-runtimeStarted,firstTextMs:firstTextAt===undefined?null:firstTextAt-runtimeStarted,firstThinkingMs:firstThinkingAt===undefined?null:firstThinkingAt-runtimeStarted,streamMs:Date.now()-headersAt,characters:result.text.length,requestedThinking:extra.thinking?.type||extra.reasoning_effort||'default',requestedEffort:extra.reasoning_effort||'default',serverTiming:selected.provider==='DeepSeek'?String(response.headers?.get('Server-Timing')||'').slice(0,256):''});
-  return {...result, webResearch, analysis};
+  let firstTextAt, firstThinkingAt, textCharacters=0, outcome='failed';
+  try {
+    const result=await readRuntimeStream(response, selected.provider, {...callbacks,
+      onToken:token=>{firstTextAt??=Date.now();textCharacters+=token.length;callbacks.onToken?.(token);},
+      onThinking:()=>{firstThinkingAt??=Date.now();callbacks.onThinking?.();},
+    });
+    outcome='success';
+    return {...result, webResearch, analysis};
+  } finally {
+    // Failed/truncated reasoning passes are latency too; do not hide them from
+    // diagnostics just because no usable answer was returned.
+    recordRuntimeTiming({provider:selected.provider,stage:callbacks.naming?'title':callbacks.editing?'document-edit':callbacks.repairing?'repair':callbacks.analyzing?'analysis':callbacks.drafting?'document':callbacks.planning?'planning':'answer',outcome:callbacks.signal?.aborted?'cancelled':outcome,responseMs:headersAt-runtimeStarted,firstTextMs:firstTextAt===undefined?null:firstTextAt-runtimeStarted,firstThinkingMs:firstThinkingAt===undefined?null:firstThinkingAt-runtimeStarted,streamMs:Date.now()-headersAt,characters:textCharacters,requestedThinking:extra.thinking?.type||extra.reasoning_effort||'default',requestedEffort:extra.reasoning_effort||'default',serverTiming:selected.provider==='DeepSeek'?String(response.headers?.get('Server-Timing')||'').slice(0,256):''});
+  }
 }
 
 function saveAnalysis(message,analysis){

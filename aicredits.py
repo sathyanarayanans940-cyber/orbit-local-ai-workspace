@@ -1,5 +1,6 @@
 """Optional AICredits gateway for the installed, local Orbit server (stdlib only)."""
 import http.client
+from deepseek import StreamCompletion
 import ipaddress
 import json
 import os
@@ -266,12 +267,22 @@ class AICreditsGateway:
             handler.send_header('X-Content-Type-Options', 'nosniff')
             handler.end_headers()
             started = True
+            completion = StreamCompletion(require_usage=True)
             while True:
-                chunk = response.read1(65536)
+                try:
+                    chunk = response.read1(65536)
+                except TimeoutError:
+                    if completion.finished:
+                        break
+                    raise
                 if not chunk:
                     break
                 handler.wfile.write(chunk)
                 handler.wfile.flush()
+                if completion.feed(chunk):
+                    break
+                if completion.finished and getattr(connection, 'sock', None):
+                    connection.sock.settimeout(3)
         except (AICreditsError, OSError, ValueError, TypeError, AttributeError, http.client.HTTPException) as error:
             message = str(error) if isinstance(error, AICreditsError) else 'Could not reach AICredits or save its settings. Check your internet connection and local installation.'
             if not started:
