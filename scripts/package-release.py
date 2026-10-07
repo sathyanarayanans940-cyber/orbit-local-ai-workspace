@@ -9,7 +9,7 @@ root = Path(__file__).resolve().parent.parent
 release = root / 'release'
 release.mkdir(exist_ok=True)
 files = '''file-preview.js archives.js document-assets.js document-edits.js workspace-core.js workspace-budget.js document-history.js workspace-tools.js long-documents.js boot.js analyze-sandbox.html analyze.js analyze-worker.js chat-store.js memories.js app.js voice.js usage.js charts.js widgets.js web-tools.js thinking.js widgets-ui.js icon.svg index.html
-scripts/setup-analyze.py manifest.webmanifest server.py gemini.py deepseek.py aicredits.py orbit-dns.py service-worker.js styles.css
+scripts/setup-analyze.py manifest.webmanifest server.py gemini.py openai_gateway.py deepseek.py aicredits.py orbit-dns.py service-worker.js styles.css
 install-macos.command install-macos.sh install-windows.cmd install-windows.ps1
 orbit-ollama-start-macos.sh orbit-start-windows.ps1 orbit-watchdog-windows.ps1'''.split()
 files += [str(p.relative_to(root)) for p in sorted((root / 'vendor').rglob('*')) if p.is_file() and not p.name.startswith('.')]

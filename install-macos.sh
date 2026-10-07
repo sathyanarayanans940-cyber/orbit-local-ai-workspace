@@ -223,7 +223,7 @@ ASSETS=(
   manifest.webmanifest
   server.py
   gemini.py
-  deepseek.py
+  openai_gateway.py deepseek.py
   aicredits.py
   orbit-dns.py
   service-worker.js

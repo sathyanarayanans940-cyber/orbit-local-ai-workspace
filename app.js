@@ -326,6 +326,7 @@ const runtimeEndpoints = {
 };
 if (window.ORBIT_CLOUD) delete runtimeEndpoints['LM Studio'];
 else runtimeEndpoints.Gemini = {models: '/api/gemini/models', chat: '/api/gemini/chat', headers: {'X-Orbit-Gemini': '1'}};
+if (!window.ORBIT_CLOUD) runtimeEndpoints.OpenAI = {models:'/api/openai/models',chat:'/api/openai/chat',headers:{'X-Orbit-OpenAI':'1'}};
 if (!window.ORBIT_CLOUD) runtimeEndpoints.DeepSeek = {models:'/api/deepseek/models',chat:'/api/deepseek/chat',headers:{'X-Orbit-DeepSeek':'1'}};
 if (!window.ORBIT_CLOUD) runtimeEndpoints.AICredits = {models:'/api/aicredits/models',chat:'/api/aicredits/chat',headers:{'X-Orbit-AICredits':'1'}};
 const runtimeProbeTimeout = window.ORBIT_CLOUD ? 25000 : 3000;
@@ -1848,6 +1849,7 @@ function resetAppearanceSettings() {
 function closePreferences() {
   closeDefaultModelPicker();
   $('#gemini-api-key').value = '';
+  $('#openai-api-key').value = '';
   $('#deepseek-api-key').value = '';
   $('#aicredits-api-key').value = '';
   $('#preferences-modal').hidden = true;
@@ -1904,6 +1906,56 @@ async function updateGeminiSettings(action = 'status') {
   }
 }
 
+let openaiSettingsBusy = false;
+async function openaiSettingsRequest(path, key) {
+  const response = await fetch(`/api/openai/${path}`, {
+    method: key === undefined ? 'GET' : 'POST',
+    headers: {'X-Orbit-OpenAI': '1', ...(key === undefined ? {} : {'Content-Type': 'application/json'})},
+    ...(key === undefined ? {} : {body: JSON.stringify({key})}),
+    cache: 'no-store', signal: AbortSignal.timeout(15000),
+  });
+  const data = await response.json().catch(() => null);
+  if (response.status === 404 && !data?.error) throw new Error('Run the full Orbit updater to enable OpenAI.');
+  if (!data) throw new Error('Orbit received an unreadable response while checking OpenAI.');
+  if (!response.ok) throw new Error(data.error || 'Could not connect to OpenAI. Please retry.');
+  return data;
+}
+
+async function updateOpenAISettings(action = 'status') {
+  if (window.ORBIT_CLOUD || openaiSettingsBusy) return;
+  const input = $('#openai-api-key'), status = $('#openai-key-status');
+  let key = action === 'save' ? input.value.trim() : undefined;
+  if (action === 'save' && !key) { status.textContent = 'Paste your new API key first.'; input.focus(); return; }
+  openaiSettingsBusy = true;
+  $$('.openai-settings-actions button').forEach(button => { button.disabled = true; });
+  input.disabled = true;
+  status.textContent = action === 'status' ? 'Checking settings…' : action === 'remove' ? 'Removing key…' : 'Checking OpenAI…';
+  let saved = false;
+  try {
+    const configuration = await openaiSettingsRequest('settings', action === 'remove' ? '' : key);
+    if (action === 'save' || action === 'remove') { input.value = ''; key = undefined; saved = true; }
+    input.placeholder = configuration.configured ? 'Key saved · paste here to replace it' : 'Paste a new key';
+    if (!configuration.configured) status.textContent = action === 'remove' ? 'Key removed. Ollama models are still available.' : 'No OpenAI key saved.';
+    else if (action === 'status') status.textContent = 'Key saved on this computer.';
+    else {
+      const catalog = await openaiSettingsRequest('models');
+      const count = catalog.data?.length || 0;
+      status.textContent = count ? `Catalog checked · ${count} OpenAI model${count === 1 ? '' : 's'} available. No paid generation was used; API billing is checked when you send a message.` : 'Key saved, but OpenAI returned no supported models for this account.';
+    }
+  } catch (error) {
+    status.textContent = (saved && action === 'save' ? 'Key saved. ' : '') + (error.name === 'TimeoutError' || error instanceof TypeError ? 'Could not connect. Check your internet connection and retry.' : error.message);
+  } finally {
+    key = undefined;
+    input.disabled = false;
+    $$('.openai-settings-actions button').forEach(button => { button.disabled = false; });
+    openaiSettingsBusy = false;
+    if (action !== 'status') {
+      // Finish any discovery begun with the old key before refreshing the list.
+      if (discoveryPromise) await discoveryPromise;
+      void discoverModels();
+    }
+  }
+}
 let deepseekSettingsBusy = false;
 async function deepseekSettingsRequest(path, key) {
   const response = await fetch(`/api/deepseek/${path}`, {
@@ -2029,6 +2081,7 @@ function openPreferences() {
   closeAccountMenu();
   $('#local-model-settings-nav').hidden = Boolean(window.ORBIT_CLOUD);
   void updateGeminiSettings();
+  void updateOpenAISettings();
   void updateDeepSeekSettings();
   void updateAICreditsSettings();
   const modal = $('#preferences-modal');
@@ -3206,12 +3259,12 @@ function renderThinkingControl() {
     if(slider) {
       slider.max=String(OrbitThinking.levelsFor(model).length-1);
       slider.setAttribute('aria-valuetext',value);
-      const labels=$('.thinking-slider-labels');if(labels)labels.innerHTML=OrbitThinking.levelsFor(model).map(level=>`<span>${level[0].toUpperCase()+level.slice(1)}</span>`).join('');
+      const labels=$('.thinking-slider-labels');if(labels)labels.innerHTML=OrbitThinking.levelsFor(model).map(level=>`<span>${level==='xhigh'?'Extra high':level[0].toUpperCase()+level.slice(1)}</span>`).join('');
       slider.value=String(OrbitThinking.levelIndex(value,model));
       slider.disabled=Boolean(state.sending);
       slider.style.setProperty('--thinking-progress',`${(OrbitThinking.levelIndex(value,model)/(OrbitThinking.levelsFor(model).length-1))*100}%`);
     }
-    const current=$('#thinking-level-current');if(current) current.textContent=value ? value[0].toUpperCase()+value.slice(1) : 'Thinking';
+    const current=$('#thinking-level-current');if(current) current.textContent=value==='xhigh'?'Extra high':value ? value[0].toUpperCase()+value.slice(1) : 'Thinking';
     const modelName=$('#thinking-model-name');if(modelName) modelName.textContent=model?.provider==='AICredits'?'AICredits · requested effort':String(model?.name || model?.label || model?.id || '').replace(/^.*\//,'');
     button.setAttribute('aria-expanded',String(!$('#thinking-menu').hidden));
   }
@@ -3284,6 +3337,7 @@ function modelUsesCloud(model) {
 function updateRuntimeStatus() {
   const providers = [...state.connectedProviders];
   const selected = state.models.find((model) => model.key === state.selectedModel);
+  if (!selected && String(state.selectedModel).startsWith('OpenAI:')) { setRuntimeStatus('OpenAI unavailable', 'offline'); return; }
   if (!selected && String(state.selectedModel).startsWith('AICredits:')) { setRuntimeStatus('AICredits unavailable', 'offline'); return; }
   if (providers.length) setRuntimeStatus('Runtime connected', modelUsesCloud(selected) ? 'cloud' : 'connected');
   else setRuntimeStatus('Runtime unavailable', 'offline');
@@ -3304,7 +3358,7 @@ function renderModelOptions() {
   }
   const current = state.selectedModel;
   const menu = $('#model-menu');
-  const selectedKey = String(current).startsWith('AICredits:') || state.models.some((model) => model.key === current)
+  const selectedKey = /^(?:AICredits|OpenAI):/.test(String(current)) || state.models.some((model) => model.key === current)
     ? current
     : (startupModelPending ? startupLastModel : (state.models[0]?.key || 'demo'));
   state.selectedModel = selectedKey;
@@ -3314,6 +3368,7 @@ function renderModelOptions() {
     : `<button class="model-option selected" type="button" role="option" aria-selected="true" data-model-key="demo"><span class="model-option-copy"><span class="model-option-provider">Orbit</span><span class="model-option-name">Demo response · connect a runtime</span></span><span class="model-check">${icons.check}</span></button>`;
   menu.innerHTML = options;
   if(String(selectedKey).startsWith('AICredits:') && !state.models.some(model=>model.key===selectedKey)) menu.innerHTML='<div class="model-unavailable" role="status">AICredits · DeepSeek V4.1 Flash unavailable</div>'+(state.models.length ? options : '');
+  if(String(selectedKey).startsWith('OpenAI:') && !state.models.some(model=>model.key===selectedKey)) menu.innerHTML='<div class="model-unavailable" role="status">OpenAI unavailable · check Settings → Models</div>'+(state.models.length ? options : '');
   const selected = state.models.find((model) => model.key === selectedKey);
   $('#model-label').textContent = selected
     ? `${selected.provider} · ${selected.label}`
@@ -3348,7 +3403,7 @@ function closeDefaultModelPicker() {
 function finishStartupModelWait() {
   if(!startupModelPending) return;
   startupModelPending=false;
-  state.selectedModel=String(startupDefaultModel).startsWith('AICredits:')?startupDefaultModel:startupLastModel;
+  state.selectedModel=/^(?:AICredits|OpenAI):/.test(String(startupDefaultModel))?startupDefaultModel:startupLastModel;
   renderModelOptions();
   updateRuntimeStatus();
 }
@@ -3687,12 +3742,12 @@ async function discoverModels() {
     const providers = Object.entries(runtimeEndpoints);
     const results = await Promise.all(providers.map(async ([provider, endpoints]) => {
       try {
-        const response = await fetch(endpoints.models, { headers: endpoints.headers, signal: AbortSignal.timeout(provider === 'AICredits' ? 18000 : ['Gemini','DeepSeek'].includes(provider) ? 12000 : runtimeProbeTimeout) });
+        const response = await fetch(endpoints.models, { headers: endpoints.headers, signal: AbortSignal.timeout(provider === 'AICredits' ? 18000 : ['Gemini','DeepSeek','OpenAI'].includes(provider) ? 12000 : runtimeProbeTimeout) });
         if (!response.ok) throw new Error(`${provider} model discovery failed`);
         const data = await response.json();
         const models = provider === 'Ollama'
           ? (data.models || []).map((model) => ({ id: model.name, name: model.name, parameterSize:model.details?.parameter_size || '', capabilities: model.capabilities || [], remote: Boolean(model.remote_model) }))
-          : (data.data || []).map((model) => ({ id: model.id, name: model.name || model.id, capabilities: model.capabilities || [], remote: ['Gemini','DeepSeek','AICredits'].includes(provider) || Boolean(model.remote) }));
+          : (data.data || []).map((model) => ({ id: model.id, name: model.name || model.id, capabilities: model.capabilities || [], remote: ['Gemini','DeepSeek','AICredits','OpenAI'].includes(provider) || Boolean(model.remote) }));
         return { provider, models };
       } catch (_) {
         return { provider, models: null };
@@ -3702,7 +3757,7 @@ async function discoverModels() {
     state.models = state.models.filter((model) => !Object.hasOwn(runtimeEndpoints, model.provider));
     state.connectedProviders.clear();
     results.forEach(({ provider, models }) => {
-      if (!models || (['Gemini','DeepSeek','AICredits'].includes(provider) && !models.length)) return;
+      if (!models || (['Gemini','DeepSeek','AICredits','OpenAI'].includes(provider) && !models.length)) return;
       state.connectedProviders.add(provider);
       models.forEach((model) => addModel(provider, model));
     });
@@ -3938,14 +3993,14 @@ function modelSupportsVision(model) {
 function notifyVisionCapability(attachments) {
   if (!attachments.some(a=>isImageFile(a)||a.visuals?.length)) return true;
   const selected = state.models.find((model) => model.key === state.selectedModel);
-  const selectedCapabilitiesKnown = ['Ollama','DeepSeek','AICredits'].includes(selected?.provider) && Array.isArray(selected.capabilities) && selected.capabilities.length > 0;
+  const selectedCapabilitiesKnown = ['Ollama','DeepSeek','AICredits','OpenAI'].includes(selected?.provider) && Array.isArray(selected.capabilities) && selected.capabilities.length > 0;
   if (selectedCapabilitiesKnown && !modelSupportsVision(selected)) showToast(`${selected.label} may not support image input`);
   return true;
 }
 
 async function requestRuntime(url, options, provider, usageMetadata = {}) {
   let lastError;
-  for (let attempt = 0; attempt < (['DeepSeek','AICredits'].includes(provider) ? 1 : 2); attempt += 1) {
+  for (let attempt = 0; attempt < (['DeepSeek','AICredits','OpenAI'].includes(provider) ? 1 : 2); attempt += 1) {
     if(options.signal?.aborted)throw new DOMException('Stopped','AbortError');
     if(typeof OrbitBudget!=='undefined')options=await OrbitBudget.guard(provider,usageMetadata,options);
     const usage=typeof OrbitUsage!=='undefined'?OrbitUsage.begin({kind:'model',provider,...usageMetadata}):null;
@@ -4004,7 +4059,7 @@ async function readRuntimeStream(response, provider, { onToken, onStatus, onThin
   const observeThinking=data=>{
     usage?.packet(data);
     const thinking=provider==='Ollama'?data?.message?.thinking:(data?.choices?.[0]?.delta?.reasoning_content ?? data?.choices?.[0]?.delta?.reasoning ?? data?.choices?.[0]?.message?.reasoning_content ?? data?.choices?.[0]?.message?.reasoning);
-    if(!sawThinking && typeof thinking==='string' && thinking.trim()) {
+    if(!sawThinking && ((typeof thinking==='string' && thinking.trim()) || (provider==='OpenAI' && data?.orbit_thinking===true))) {
       sawThinking=true;onThinking?.();onStatus?.('Thinking');
       usage?.thinking();
     }
@@ -4212,6 +4267,7 @@ async function requestLocalReply(prompt, conversation = state.messages, callback
   const selected = state.models.find((model) => model.key === (callbacks.modelOverride??state.selectedModel));
   if(!selected&&callbacks.modelOverride)throw new Error('The selected comparison or study model is unavailable. No fallback was used.');
   const preparationCheckpoint=callbacks.widgets&&typeof OrbitWorkspace!=='undefined'?OrbitWorkspace.checkpoint(conversation,JSON.stringify([selected?.key,typeof OrbitThinking!=='undefined'?OrbitThinking.options(selected,false):{},typeof OrbitWeb!=='undefined'?OrbitWeb.enabled():false,typeof OrbitMemories!=='undefined'?OrbitMemories.preferences():{}]),!!callbacks.resumePreparation):null;
+  if (!selected && String(state.selectedModel).startsWith('OpenAI:')) throw new Error('OpenAI is unavailable. Check its key or connection in Settings → Models; Orbit has not switched models.');
   if (!selected && String(state.selectedModel).startsWith('AICredits:')) throw new Error('DeepSeek V4.1 Flash on AICredits is unavailable. Check its key or connection; Orbit has not switched models.');
   if (!selected) return localFallback(prompt);
   const longUser=callbacks.widgets?conversation.filter(m=>m.role==='user').at(-1):null;
@@ -4286,7 +4342,7 @@ async function requestLocalReply(prompt, conversation = state.messages, callback
       },
     })});
   }
-  const parallelPreparation = ['DeepSeek','AICredits','Gemini'].includes(selected.provider) || modelUsesCloud(selected);
+  const parallelPreparation = ['DeepSeek','AICredits','Gemini','OpenAI'].includes(selected.provider) || modelUsesCloud(selected);
   const preparation = preparationTasks.length ? await prepareReplyContext(preparationTasks, {signal:callbacks.signal,onStatus:callbacks.onStatus,parallel:parallelPreparation,checkpoint:preparationCheckpoint,resume:!!callbacks.resumePreparation}) : {results:{},timings:{}};
   const {memory:memoryInstruction='',analysis,web:webResearch} = preparation.results;
   if(callbacks.widgets) {
@@ -4324,7 +4380,7 @@ async function requestLocalReply(prompt, conversation = state.messages, callback
   }
   const imageDataUrls = attachment => {
     if(!attachment || typeof attachment!=='object')return [];
-    if(selected.capabilities?.length && ['Ollama','DeepSeek','AICredits'].includes(selected.provider) && !modelSupportsVision(selected))return [];
+    if(selected.capabilities?.length && ['Ollama','DeepSeek','AICredits','OpenAI'].includes(selected.provider) && !modelSupportsVision(selected))return [];
     const images=[];
     if(!attachment.visualSummary && isImageFile(attachment) && /^data:image\//.test(attachment.dataUrl||''))images.push(attachment.dataUrl);
     if(!attachment.visualSummary)for(const v of Array.isArray(attachment.visuals)?attachment.visuals:[])if(OrbitDocuments.validImage(v?.dataUrl))images.push(v.dataUrl);
@@ -4372,8 +4428,10 @@ async function requestLocalReply(prompt, conversation = state.messages, callback
   const endpoints = runtimeEndpoints[selected.provider];
   // DeepSeek counts reasoning and JSON in the same output budget. The old
   // 16K Analyze cap could cut off its code after a long High reasoning pass.
-  const reasoningAnalysis = callbacks.analyzing && (thinkingOptions.thinking?.type==='enabled' || ['low','high','max'].includes(thinkingOptions.reasoning_effort));
-  const extra = selected.provider === 'AICredits'
+  const reasoningAnalysis = callbacks.analyzing && (thinkingOptions.thinking?.type==='enabled' || ['low','medium','high','xhigh','max'].includes(thinkingOptions.reasoning_effort));
+  const extra = selected.provider === 'OpenAI'
+    ? {...thinkingOptions, max_tokens: callbacks.naming ? (thinkingOptions.reasoning_effort==='none'?256:4096) : callbacks.planning || callbacks.repairing || callbacks.editing || (callbacks.analyzing && !reasoningAnalysis) || callbacks.drafting ? 16384 : 65536}
+    : selected.provider === 'AICredits'
     ? {...thinkingOptions, max_tokens: callbacks.naming ? 256 : callbacks.planning || callbacks.repairing || callbacks.editing || (callbacks.analyzing && !reasoningAnalysis) || callbacks.drafting ? 16384 : 65536}
     : selected.provider === 'DeepSeek'
     ? {...thinkingOptions, ...(callbacks.naming ? {max_tokens:256} : callbacks.planning || callbacks.repairing || callbacks.editing || (callbacks.analyzing && !reasoningAnalysis) || callbacks.drafting ? {max_tokens:16384} : {max_tokens:65536})}
@@ -4381,7 +4439,7 @@ async function requestLocalReply(prompt, conversation = state.messages, callback
     ? {...thinkingOptions, ...(callbacks.naming ? {max_tokens:256} : callbacks.planning || callbacks.editing || callbacks.analyzing || callbacks.drafting ? {max_tokens:8192} : {})}
     : {temperature: callbacks.naming || callbacks.planning || callbacks.repairing || callbacks.editing || callbacks.analyzing || callbacks.drafting?0:0.7, ...(callbacks.naming || callbacks.widgets || callbacks.planning || callbacks.repairing || callbacks.editing || callbacks.analyzing || callbacks.drafting ? {max_tokens:callbacks.naming?256:callbacks.analyzing||callbacks.drafting?8192:callbacks.planning?1024:-1} : {})};
   const runtimeStarted=Date.now();
-  if (selected.provider === 'DeepSeek' && callbacks.widgets) callbacks.onStatus?.(typeof OrbitThinking!=='undefined' && OrbitThinking.status(selected) || 'Waiting for DeepSeek');
+  if (['DeepSeek','OpenAI'].includes(selected.provider) && callbacks.widgets) callbacks.onStatus?.(typeof OrbitThinking!=='undefined' && OrbitThinking.status(selected) || `Waiting for ${selected.provider}`);
   const response = await requestRuntime(endpoints.chat, { method: 'POST', headers: { 'Content-Type': 'application/json', ...endpoints.headers }, body: JSON.stringify({ model: selected.id, messages: openAiHistory, stream: true, stream_options:{include_usage:true}, ...extra, ...(callbacks.structured || callbacks.planning || callbacks.repairing || callbacks.editing || callbacks.analyzing || callbacks.drafting?{response_format:{type:'json_object'}}:{}) }), signal: callbacks.signal }, selected.provider,usageMetadata);
   const headersAt=Date.now();
   let firstTextAt, firstThinkingAt, textCharacters=0, outcome='failed';
@@ -4395,7 +4453,7 @@ async function requestLocalReply(prompt, conversation = state.messages, callback
   } finally {
     // Failed/truncated reasoning passes are latency too; do not hide them from
     // diagnostics just because no usable answer was returned.
-    recordRuntimeTiming({provider:selected.provider,stage:callbacks.naming?'title':callbacks.editing?'document-edit':callbacks.repairing?'repair':callbacks.analyzing?'analysis':callbacks.drafting?'document':callbacks.planning?'planning':'answer',outcome:callbacks.signal?.aborted?'cancelled':outcome,responseMs:headersAt-runtimeStarted,firstTextMs:firstTextAt===undefined?null:firstTextAt-runtimeStarted,firstThinkingMs:firstThinkingAt===undefined?null:firstThinkingAt-runtimeStarted,streamMs:Date.now()-headersAt,characters:textCharacters,requestedThinking:extra.thinking?.type||extra.reasoning_effort||'default',requestedEffort:extra.reasoning_effort||'default',serverTiming:selected.provider==='DeepSeek'?String(response.headers?.get('Server-Timing')||'').slice(0,256):''});
+    recordRuntimeTiming({provider:selected.provider,stage:callbacks.naming?'title':callbacks.editing?'document-edit':callbacks.repairing?'repair':callbacks.analyzing?'analysis':callbacks.drafting?'document':callbacks.planning?'planning':'answer',outcome:callbacks.signal?.aborted?'cancelled':outcome,responseMs:headersAt-runtimeStarted,firstTextMs:firstTextAt===undefined?null:firstTextAt-runtimeStarted,firstThinkingMs:firstThinkingAt===undefined?null:firstThinkingAt-runtimeStarted,streamMs:Date.now()-headersAt,characters:textCharacters,requestedThinking:extra.thinking?.type||extra.reasoning_effort||'default',requestedEffort:extra.reasoning_effort||'default',serverTiming:['DeepSeek','OpenAI'].includes(selected.provider)?String(response.headers?.get('Server-Timing')||'').slice(0,256):''});
   }
 }
 
@@ -5210,6 +5268,12 @@ $('#gemini-check-key').addEventListener('click', () => void updateGeminiSettings
 $('#gemini-remove-key').addEventListener('click', () => void updateGeminiSettings('remove'));
 $('#gemini-api-key').addEventListener('keydown', event => {
   if (event.key === 'Enter') { event.preventDefault(); void updateGeminiSettings('save'); }
+});
+$('#openai-save-key').addEventListener('click', () => void updateOpenAISettings('save'));
+$('#openai-check-key').addEventListener('click', () => void updateOpenAISettings('check'));
+$('#openai-remove-key').addEventListener('click', () => void updateOpenAISettings('remove'));
+$('#openai-api-key').addEventListener('keydown', event => {
+  if (event.key === 'Enter') { event.preventDefault(); void updateOpenAISettings('save'); }
 });
 $('#deepseek-save-key').addEventListener('click', () => void updateDeepSeekSettings('save'));
 $('#deepseek-check-key').addEventListener('click', () => void updateDeepSeekSettings('check'));

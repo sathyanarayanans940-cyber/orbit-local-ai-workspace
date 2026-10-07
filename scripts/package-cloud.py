@@ -24,6 +24,7 @@ with tempfile.TemporaryDirectory(prefix='orbit-cloud-package-') as tmp:
             shutil.copy2(source, target)
     shutil.copy2(root / 'server.py', package / 'server.py')
     shutil.copy2(root / 'gemini.py', package / 'gemini.py')
+    shutil.copy2(root / 'openai_gateway.py', package / 'openai_gateway.py')
     shutil.copy2(root / 'deepseek.py', package / 'deepseek.py')
     shutil.copy2(root / 'aicredits.py', package / 'aicredits.py')
     shutil.copy2(root / 'cloud' / 'render.yaml', package / 'render.yaml')

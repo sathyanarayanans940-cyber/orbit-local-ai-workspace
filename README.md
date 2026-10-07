@@ -1,6 +1,6 @@
 # Orbit local AI workspace
 
-Personal software project: a **local AI workspace for LM Studio and Ollama**, with optional **Google Gemini and DeepSeek API integrations**. Built with JavaScript, Python provider adapters, IndexedDB and offline document libraries for file uploads, previews and document generation.
+Personal software project: a **local AI workspace for LM Studio and Ollama**, with optional **Google Gemini, DeepSeek and OpenAI API integrations**. Built with JavaScript, Python provider adapters, IndexedDB and offline document libraries for file uploads, previews and document generation.
 
 **Status:** actively developed prototype. Features and regression tests are included; this portfolio snapshot does not establish production readiness or reliable output from every model. Generated content depends on the selected model.
 
@@ -21,7 +21,7 @@ A self-contained local AI chat workspace UI inspired by ChatGPT and Open WebUI. 
 - Responsive conversation history sidebar
 - Light, dark, and system appearance modes
 - Model-aware chat requests for both local APIs
-- Optional Google Gemini and DeepSeek API integrations through Python provider adapters
+- Optional Google Gemini, DeepSeek and OpenAI API integrations through Python provider adapters
 - A ChatGPT-style plus menu for model selection and file uploads
 - File picker and drag-and-drop attachments on the message composer
 - Image attachments are sent as multimodal payloads to vision-capable local models
@@ -298,3 +298,9 @@ saved extracted text. Reattach them for original-file previews/downloads.
 Newly sent originals up to 25 MB are stored locally in IndexedDB when storage
 is available; generated files are rebuilt from their recipes. Chat exports do
 not include original uploads. Clearing browser site data removes stored originals.
+
+## OpenAI API
+
+Settings → Models → OpenAI connects your own API key. Supported GPT-6 Luna, Sol, 6.1 Sol and Astra models appear when available in your account. Includes model-specific thinking controls, streaming, image input, existing Orbit document/Analyze workflows, usage tracking and API limits. API billing is separate from ChatGPT subscriptions.
+
+See [setup, research sources and validation](docs/openai-api.md). The adapter was tested with synthetic native Responses events; live account access and latency require your own API key.

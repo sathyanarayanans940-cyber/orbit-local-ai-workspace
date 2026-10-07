@@ -94,3 +94,15 @@ test('AICredits Flash exposes persistent effort requests without enabling other 
  }
  assert.equal(T.mode({...m,id:'deepseek/deepseek-v4-pro'}),null);
 });
+
+test('OpenAI efforts follow each model and internal work does not overwrite user selection',()=>{
+ for(const id of ['gpt-6-luna','gpt-6-sol','gpt-6.1-sol','gpt-6-astra']){
+  const m={id,provider:'OpenAI',key:'OpenAI:'+id},off=['gpt-6-luna','gpt-6-sol'].includes(id);
+  assert.equal(T.mode(m),'levels');assert.equal(T.defaultValue(m),'medium');
+  assert.deepEqual([...T.levelsFor(m)],[...(off?['off']:[]),'low','medium','high','xhigh','max']);
+  T.set(m,'max');assert.equal(T.options(m).reasoning_effort,'max');
+  assert.equal(T.options(m,true).reasoning_effort,off?'none':'low');assert.equal(T.value(m),'max');
+  T.set(m,'off');assert.equal(T.value(m),off?'off':'max');
+ }
+ assert.equal(T.mode({provider:'OpenAI',id:'not-a-model'}),null);
+});

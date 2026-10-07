@@ -52,3 +52,11 @@ test('AICredits failure never silently selects another available provider',()=>{
  const preferred=setup(key,'Gemini:gemini-2.5-flash');preferred.c.state.models=[{key:'Gemini:gemini-2.5-flash'}];
  preferred.c.finishStartupModelWait();assert.equal(preferred.c.state.selectedModel,key);
 });
+
+test('OpenAI unavailable selection survives discovery and never falls back to another paid model',()=>{
+ const key='OpenAI:gpt-6-luna';const {c}=setup('',key);
+ c.state.models=[{key:'Gemini:gemini-2.5-flash',label:'Gemini',provider:'Gemini'}];c.renderModelOptions();
+ assert.equal(c.state.selectedModel,key);assert.match(c.$('#model-menu').innerHTML,/OpenAI unavailable/);
+ const preferred=setup(key,'Gemini:gemini-2.5-flash');preferred.c.state.models=[{key:'Gemini:gemini-2.5-flash'}];
+ preferred.c.finishStartupModelWait();assert.equal(preferred.c.state.selectedModel,key);
+});

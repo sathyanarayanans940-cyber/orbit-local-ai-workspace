@@ -122,3 +122,9 @@ test('very small doughnut shares remain positive in the legend and finite in the
 test('doughnut labels and tooltips cannot inject SVG or HTML',()=>{
  const html=U.render(chartSnapshot([{model:'</title><script>bad()</script>',provider:'<img src=x onerror=bad>',requests:2}]));assert.doesNotMatch(html,/<script>|<img/);assert.match(html,/&lt;\/title&gt;&lt;script&gt;/);
 });
+
+test('OpenAI extra-high usage survives storage, keeping reasoning and cache as subsets',async()=>{
+ const s=make(),tokens=U.tokens({usage:{prompt_tokens:100,completion_tokens:40,total_tokens:140,prompt_tokens_details:{cached_tokens:80},completion_tokens_details:{reasoning_tokens:30}}},'OpenAI');
+ await s.record(event({provider:'OpenAI',model:'gpt-6-luna',mode:U.thinking({reasoning_effort:'xhigh'}),tokens}));
+ const snapshot=await s.read(),sum=U.summary(snapshot);assert.equal(sum.total.total,140);assert.equal(sum.total.reasoning,30);assert.equal(sum.total.cached,80);assert.equal(sum.cells[0].mode,'xhigh');s.close();
+});

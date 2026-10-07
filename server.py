@@ -26,6 +26,7 @@ from urllib.parse import urlsplit, parse_qsl, urlencode
 from pathlib import Path
 from xml.etree import ElementTree
 from gemini import GeminiGateway
+from openai_gateway import OpenAIGateway
 from deepseek import DeepSeekGateway
 from aicredits import AICreditsGateway
 
@@ -110,6 +111,7 @@ class WebRelayBackoff:
 
 WEB_RELAY_BACKOFF = WebRelayBackoff()
 GEMINI = GeminiGateway(ROOT)
+OPENAI = OpenAIGateway(ROOT)
 DEEPSEEK = DeepSeekGateway(ROOT)
 AICREDITS = AICreditsGateway(ROOT)
 
@@ -549,6 +551,9 @@ class OrbitHandler(http.server.SimpleHTTPRequestHandler):
         if path.startswith('/api/aicredits/'):
             AICREDITS.handle(self, path, 'GET')
             return
+        if path.startswith('/api/openai/'):
+            OPENAI.handle(self, path, 'GET')
+            return
         if path.startswith('/api/deepseek/'):
             DEEPSEEK.handle(self, path, 'GET')
             return
@@ -585,6 +590,9 @@ class OrbitHandler(http.server.SimpleHTTPRequestHandler):
         web_path = self.path.split("?", 1)[0]
         if web_path.startswith('/api/aicredits/'):
             AICREDITS.handle(self, web_path, 'POST')
+            return
+        if web_path.startswith('/api/openai/'):
+            OPENAI.handle(self, web_path, 'POST')
             return
         if web_path.startswith('/api/deepseek/'):
             DEEPSEEK.handle(self, web_path, 'POST')

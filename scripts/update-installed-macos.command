@@ -8,7 +8,7 @@ LABEL='com.sathya.orbit.server'
 WEB_ONLY=false
 if [[ ${1:-} == --web-only ]]; then WEB_ONLY=true; elif [[ $# -gt 0 ]]; then echo 'Usage: update-installed-macos.command [--web-only]'; exit 2; fi
 python3 "$ROOT/scripts/setup-analyze.py"
-FILES=(gemini.py deepseek.py aicredits.py server.py app.js index.html styles.css document-assets.js document-edits.js workspace-core.js workspace-budget.js document-history.js workspace-tools.js long-documents.js boot.js analyze-sandbox.html analyze.js analyze-worker.js chat-store.js memories.js file-preview.js archives.js voice.js usage.js thinking.js charts.js widgets.js widgets-ui.js web-tools.js service-worker.js)
+FILES=(gemini.py openai_gateway.py deepseek.py aicredits.py server.py app.js index.html styles.css document-assets.js document-edits.js workspace-core.js workspace-budget.js document-history.js workspace-tools.js long-documents.js boot.js analyze-sandbox.html analyze.js analyze-worker.js chat-store.js memories.js file-preview.js archives.js voice.js usage.js thinking.js charts.js widgets.js widgets-ui.js web-tools.js service-worker.js)
 if "$WEB_ONLY"; then FILES=(app.js index.html styles.css document-assets.js document-edits.js workspace-core.js workspace-budget.js document-history.js workspace-tools.js long-documents.js boot.js analyze-sandbox.html analyze.js analyze-worker.js chat-store.js memories.js file-preview.js archives.js voice.js usage.js thinking.js charts.js widgets.js widgets-ui.js web-tools.js service-worker.js); fi
 [[ -f "$DEST/server.py" && -f "/Library/LaunchDaemons/$LABEL.plist" ]] || { echo 'No installed Orbit service found. Use the full installer.'; exit 1; }
 for asset in "${FILES[@]}"; do [[ -f "$ROOT/$asset" ]] || { echo "Missing update asset: $asset"; exit 1; }; done

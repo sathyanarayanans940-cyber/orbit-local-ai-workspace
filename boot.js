@@ -8,11 +8,11 @@
   try {
     await OrbitChatStore.ready;
     await load('workspace-core.js?v=2');
-    await load('workspace-budget.js?v=1');
+    await load('workspace-budget.js?v=2');
     await load('document-history.js?v=1');
-    await load('app.js?v=250');
+    await load('app.js?v=251');
     await load('file-preview.js?v=24');
-    await load('workspace-tools.js?v=3');
+    await load('workspace-tools.js?v=4');
     initWidgetUi();
   } catch (error) {
     const notice = document.createElement('div');

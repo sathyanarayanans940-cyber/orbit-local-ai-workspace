@@ -2,7 +2,7 @@
 (function(root){
   'use strict';
   const purposes=['answer','analysis','title','web-planning','memory','planning','document','document-edit','repair','vision','study','comparison'];
-  const modes=['off','on','low','medium','high','max','default'];
+  const modes=['off','on','low','medium','high','xhigh','max','default'];
   const metrics=['requests','success','failed','cancelled','input','output','total','reasoning','cached','reported','inputReported','outputReported','reasoningReported','cachedReported','durationMs','firstTextMs','firstTextCount','thinkingMs','thinkingCount','observedThinking','results'];
   const count=n=>Number.isSafeInteger(n)&&n>=0?n:null;
   const safe=n=>Math.min(Number.MAX_SAFE_INTEGER,Math.max(0,Number.isFinite(n)?Math.round(n):0));

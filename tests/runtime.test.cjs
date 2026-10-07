@@ -472,3 +472,34 @@ test('document edit plans use JSON while retaining the selected thinking mode ac
   r.send(provider==='Ollama'?{message:{content:'{"edits":[]}'},done:true}:{choices:[{delta:{content:'{"edits":[]}'},finish_reason:'stop'}]});r.close();await pending;
  }
 });
+
+test('OpenAI real orchestration preserves Analyze effort, lightweight admin work, image input and native adapter boundary',async()=>{
+ for(const [callbacks,effort,expectedBudget] of [[{analyzing:true},'xhigh',65536],[{naming:true},'none',256],[{naming:true},'low',4096],[{editing:true},'none',16384]]){
+  const r=runtime('OpenAI');r.context.runtimeEndpoints.OpenAI={chat:'/api/openai/chat',headers:{'X-Orbit-OpenAI':'1'}};
+  r.context.state.models[0].id='gpt-6-luna';let internal;r.context.OrbitThinking.options=(_,flag)=>{internal=flag;return {reasoning_effort:effort};};
+  r.context.isImageFile=()=>true;
+  const pending=r.context.requestLocalReply('',[{role:'user',text:'Question',attachments:[{name:'image.png',dataUrl:'data:image/png;base64,YQ=='}]}],callbacks);
+  await flush();const request=r.request(),body=request.body;
+  assert.equal(request.url,'/api/openai/chat');assert.equal(request.headers['X-Orbit-OpenAI'],'1');assert.equal(body.reasoning_effort,effort);assert.equal(body.max_tokens,expectedBudget);
+  assert.equal(body.temperature,undefined);assert.equal(internal,!!callbacks.naming);
+  assert.equal(body.messages.at(-1).content[1].image_url.url,'data:image/png;base64,YQ==');
+  if(!callbacks.naming)assert.equal(body.response_format.type,'json_object');
+  r.send({choices:[{delta:{content:callbacks.naming?'Title':'{"ok":true}'},finish_reason:'stop'}]});r.raw('data: [DONE]\n\n');r.close();await pending;
+ }
+});
+
+test('OpenAI reasoning markers and tokens remain separate; truncation fails with usage retained',async()=>{
+ const r=runtime('OpenAI'),statuses=[],tokens=[],packets=[];let finished;
+ r.context.OrbitUsage={response:()=>({packet:p=>packets.push(p),thinking(){},text(){},finish:s=>finished=s})};
+ const response=await r.context.fetch('/synthetic',{body:'{}',signal:new AbortController().signal});
+ const pending=r.context.readRuntimeStream(response,'OpenAI',{onToken:t=>tokens.push(t),onStatus:s=>statuses.push(s)});
+ r.send({orbit_thinking:true,choices:[]});r.send({choices:[{delta:{content:'Partial'}}]});r.send({usage:{total_tokens:140},choices:[]});r.send({choices:[{delta:{},finish_reason:'length'}]});r.close();
+ await assert.rejects(pending,/output or context limit/);assert.deepEqual(tokens,['Partial']);assert.deepEqual(statuses,['Thinking']);assert.equal(finished,'failed');assert.equal(packets.find(p=>p.usage).usage.total_tokens,140);
+});
+
+test('OpenAI request failures never automatically retry or switch providers',async()=>{
+ const r=runtime('OpenAI');let calls=0;r.context.fetch=async()=>{calls++;throw new TypeError('Network failed');};
+ await assert.rejects(r.context.requestRuntime('/api/openai/chat',{body:'{}'},'OpenAI'));assert.equal(calls,1);
+ r.context.state.models=[];r.context.state.selectedModel='OpenAI:gpt-6-luna';
+ await assert.rejects(r.context.requestLocalReply('Hello',[],{}),/has not switched models/);assert.equal(calls,1);
+});

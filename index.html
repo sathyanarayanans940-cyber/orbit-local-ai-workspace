@@ -9,7 +9,7 @@
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="vendor/katex/katex.min.css" />
     <title>Orbit — Local AI workspace</title>
-    <link rel="stylesheet" href="styles.css?v=202" />
+    <link rel="stylesheet" href="styles.css?v=203" />
   </head>
   <body>
     <svg class="svg-sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -346,6 +346,20 @@
             </nav>
             <div class="settings-panels">
               <section class="settings-panel" data-settings-panel="models" hidden>
+                <h3>OpenAI · Direct API</h3>
+                <p class="settings-panel-description">Use GPT-6 Luna, Sol or Astra with your OpenAI API account. Available models are checked with OpenAI.</p>
+                <div class="preference-field">
+                  <label for="openai-api-key">OpenAI API key</label>
+                  <input id="openai-api-key" type="password" maxlength="512" autocomplete="off" spellcheck="false" placeholder="Paste a new key" />
+                  <p class="settings-hint">Saved on this computer, outside browser storage and chat exports. When selected, your messages and relevant attachments or memories are sent to OpenAI.</p>
+                  <p class="settings-hint">API usage is billed separately from ChatGPT subscriptions. Thinking tokens count toward output usage. <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">Get an API key</a> · <a href="https://openai.com/api/pricing/" target="_blank" rel="noopener noreferrer">Current pricing</a></p>
+                  <div class="openai-settings-actions">
+                    <button class="secondary-button" type="button" id="openai-save-key">Save key</button>
+                    <button class="secondary-button" type="button" id="openai-check-key">Check connection</button>
+                    <button class="secondary-button" type="button" id="openai-remove-key">Remove key</button>
+                  </div>
+                  <p class="settings-hint" id="openai-key-status" role="status" aria-live="polite"></p>
+                </div>
                 <h3>AICredits · DeepSeek Flash</h3>
                 <p class="settings-panel-description">Use your AICredits wallet with DeepSeek V4.1 Flash, including vision.</p>
                 <div class="preference-field">
@@ -420,7 +434,7 @@
                     <button id="default-model-input" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="default-model-options" aria-describedby="default-model-help"><span>Last-used model</span><svg aria-hidden="true"><use href="#icon-chevron" /></svg></button>
                     <div id="default-model-options" role="listbox" aria-label="Default model" hidden></div>
                   </div>
-                  <p id="default-model-help">Used on each reload. If unavailable after 6 seconds, Orbit uses your last-used model, or another available model.</p>
+                  <p id="default-model-help">Used on each reload. If unavailable after 6 seconds, Orbit uses your last-used model, or another available model. OpenAI and AICredits selections stay selected when unavailable.</p>
                 </div>
                 <div class="preference-field">
                   <label>Accent color</label>
@@ -624,15 +638,15 @@
     <script src="widgets.js?v=57"></script>
     <script src="web-tools.js?v=13"></script>
     <script src="widgets-ui.js?v=37"></script>
-    <script src="thinking.js?v=10"></script>
+    <script src="thinking.js?v=11"></script>
     <script src="voice.js?v=1"></script>
-    <script src="usage.js?v=3"></script>
+    <script src="usage.js?v=4"></script>
     <script src="document-assets.js?v=7"></script>
     <script src="document-edits.js?v=2"></script>
     <script src="long-documents.js?v=13"></script>
     <script src="analyze.js?v=12"></script>
     <script src="memories.js?v=7"></script>
     <script src="chat-store.js?v=6"></script>
-    <script src="boot.js?v=58"></script>
+    <script src="boot.js?v=59"></script>
   </body>
 </html>

@@ -294,7 +294,7 @@ $assets = @(
     'orbit-watchdog-windows.ps1',
     'server.py',
     'gemini.py',
-    'deepseek.py',
+    'openai_gateway.py', 'deepseek.py',
     'aicredits.py',
     'service-worker.js',
     'styles.css'

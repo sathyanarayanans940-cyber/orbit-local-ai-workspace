@@ -3,7 +3,7 @@ WORKDIR /app
 COPY cloud/requirements.txt ./cloud/requirements.txt
 RUN pip install --no-cache-dir -r cloud/requirements.txt
 COPY cloud/ ./cloud/
-COPY server.py gemini.py deepseek.py aicredits.py ./
+COPY server.py gemini.py openai_gateway.py deepseek.py aicredits.py ./
 COPY public/ ./public/
 RUN useradd --uid 10001 --create-home orbit
 USER orbit

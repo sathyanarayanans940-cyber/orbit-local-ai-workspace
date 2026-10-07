@@ -5,6 +5,7 @@
   const unsupported=new Set();
   function mode(model) {
     if(unsupported.has(model?.key)) return null;
+    if(model?.provider==='OpenAI' && ['gpt-6-luna','gpt-6-sol','gpt-6.1-sol','gpt-6-astra'].includes(model.id)) return 'levels';
     if(model?.provider==='AICredits' && model.id==='deepseek/deepseek-v4.1-flash') return 'levels';
     if(model?.provider==='DeepSeek' && ['deepseek-flash','deepseek-v4-pro'].includes(model.id)) return 'levels';
     if(model?.provider==='Gemini') {
@@ -19,7 +20,7 @@
     if(/^(?:qwen3(?:\.[56])?|deepseek-v3\.1)(?::|$)/.test(id)) return 'toggle';
     return null;
   }
-  function levelsFor(model) { return ['DeepSeek','AICredits'].includes(model?.provider)?['off','low','high','max']:LEVELS.slice(); }
+  function levelsFor(model) { if(model?.provider==='OpenAI') return [...(['gpt-6-luna','gpt-6-sol'].includes(model.id)?['off']:[]),'low','medium','high','xhigh','max']; return ['DeepSeek','AICredits'].includes(model?.provider)?['off','low','high','max']:LEVELS.slice(); }
   function defaultValue(model) {
     const type=mode(model);
     if(type==='levels') return ['DeepSeek','AICredits'].includes(model?.provider)?'high':model?.provider==='Gemini'?'low':'medium';
@@ -49,6 +50,10 @@
   function options(model,internal=false) {
     const type=mode(model);
     if(!type) return {};
+    if(model?.provider==='OpenAI') {
+      const effort=internal?(levelsFor(model).includes('off')?'off':'low'):value(model);
+      return {reasoning_effort:effort==='off'?'none':effort};
+    }
     if(model?.provider==='AICredits') {
       const effort=internal?'off':value(model);
       return {reasoning_effort:effort==='off'?'none':effort};
