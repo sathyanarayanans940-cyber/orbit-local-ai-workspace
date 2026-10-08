@@ -84,3 +84,23 @@ test('cancellation after a complete run cannot become a successful cached result
  const c=new AbortController();
  await assert.rejects(A.analyze(user('Solve'),{signal:c.signal,plan:async()=>JSON.stringify({action:'run',complete:true,code:'print(1)'}),run:async()=>{c.abort();return {ok:true,output:'Late result'};}}),{name:'AbortError'});
 });
+
+test('prepared Python executes with zero planning calls and failed execution still repairs',async()=>{
+ const initialPlan={action:'run',purpose:'Boundary checks',language:'python',complete:true,code:'assert 1 == 2'};
+ let plans=0,runs=0;
+ const result=await A.analyze(user('Run these checks'),{initialPlan,plan:async history=>{plans++;assert.match(history.at(-1).text,/AssertionError/);return JSON.stringify({...initialPlan,code:'print(34)'});},run:async code=>{runs++;return code.startsWith('assert')?{ok:false,error:'AssertionError'}:{ok:true,output:'34'};}});
+ assert.equal(plans,1);assert.equal(runs,2);assert.deepEqual(result.checks.map(c=>c.ok),[false,true]);
+ const statuses=[];
+ const direct=await A.analyze(user('Run Python'),{initialPlan:{...initialPlan,code:'print(34)'},plan:()=>assert.fail('redundant planner'),onStatus:s=>statuses.push(s),run:async()=>({ok:true,output:'34'})});
+ assert.equal(direct.checks[0].ok,true);assert.deepEqual(statuses,['Analyzing…']);
+});
+test('dependent analysis, malformed direct code, empty output and abort retain recovery gates',async()=>{
+ const good={action:'run',complete:true,code:'print(34)'};
+ for(const initialPlan of [null,{action:'none'},{...good,code:''},{...good,code:'x'.repeat(16001)}]){
+  let plans=0;const result=await A.analyze(user('Run'),{initialPlan,plan:async()=>{plans++;return JSON.stringify(good);},run:async()=>({ok:true,output:'34'})});assert.equal(plans,1);assert.equal(result.checks[0].ok,true);
+ }
+ let plans=0;
+ await A.analyze(user('Calculate using search results'),{initialPlan:good,evidence:{web:{instruction:'Fresh value is 75'}},plan:async history=>{plans++;assert.match(history[1].text,/Fresh value is 75/);return JSON.stringify(good);},run:async()=>({ok:true,output:'34'})});assert.equal(plans,1);
+ plans=0;await A.analyze(user('Run'),{initialPlan:good,plan:async()=>{plans++;return '{"action":"done"}';},run:async()=>({ok:true,output:''})});assert.equal(plans,1);
+ const c=new AbortController();c.abort();await assert.rejects(A.analyze(user('Run'),{initialPlan:good,signal:c.signal,plan:()=>assert.fail(),run:()=>assert.fail()}),{name:'AbortError'});
+});

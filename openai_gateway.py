@@ -75,9 +75,84 @@ def normalized_usage(usage):
     return result or None
 
 
+def routing_capabilities(value):
+    if (not isinstance(value, dict) or set(value) != {'memory', 'web', 'analysis', 'files'}
+            or any(type(v) is not bool for v in value.values())):
+        raise OpenAIError(400, 'Invalid Orbit tool capabilities.')
+    return value
+
+
+def route_function(capabilities):
+    """A fixed local dispatcher, never arbitrary remote tools or execution code."""
+    enabled = [key for key in ('memory', 'web', 'analysis', 'files') if capabilities[key]]
+    def obj(properties):
+        return {'type': 'object', 'additionalProperties': False, 'properties': properties, 'required': list(properties)}
+    def nullable(properties):
+        return {'anyOf': [obj(properties), {'type': 'null'}]}
+    string = {'type': 'string'}
+    inputs = obj({
+        'web': nullable({'action': {'type': 'string', 'enum': ['search', 'read']}, 'query': string, 'url': string}),
+        'analysis': nullable({'action': {'type': 'string', 'enum': ['run']}, 'purpose': string, 'language': string,
+                              'complete': {'type': 'boolean'}, 'code': string}),
+        'memory': nullable({'action': {'type': 'string', 'enum': ['none', 'summaries', 'search']}, 'query': string,
+                            'preferenceUpdates': {'type': 'array', 'maxItems': 8, 'items': obj({
+                                'op': {'type': 'string', 'enum': ['set', 'remove', 'clear']},
+                                'scope': {'type': 'string', 'enum': ['general','pdf','word','slides','spreadsheet','charts','code']},
+                                'key': string, 'value': string, 'evidence': string})}}),
+    })
+    return {'type': 'function', 'name': 'orbit_tools', 'strict': True,
+            'description': 'Request actual Orbit work: analysis executes Python; web retrieves current sources; memory retrieves prior chats or updates preferences; files generates or edits deliverables. Select at least one needed tool. Independent tools share a group; later groups wait for earlier results. Put files alone in the last group. For direct answers do not call this function.',
+            'parameters': {'type': 'object', 'additionalProperties': False,
+                           'properties': {'steps': {'type': 'array', 'minItems': 1, 'maxItems': len(enabled),
+                                          'description': 'Nonempty ordered groups of tools. Python checks: [["analysis"]]. A document: [["files"]]. Research then document: [["web"],["files"]].',
+                                          'items': {'type': 'array', 'minItems': 1, 'maxItems': min(3, len(enabled)),
+                                                    'items': {'type': 'string', 'enum': enabled}}},
+                                          'inputs': inputs},
+                           'required': ['steps', 'inputs']}}
+
+
+def validate_route(arguments, capabilities):
+    if not isinstance(arguments, str) or len(arguments) > 65536:
+        raise OpenAIError(502, 'OpenAI returned an invalid Orbit tool request.')
+    try:
+        route = json.loads(arguments)
+    except ValueError:
+        raise OpenAIError(502, 'OpenAI returned an incomplete Orbit tool request.')
+    if (not isinstance(route, dict) or not {'steps'} <= set(route) <= {'steps', 'inputs'}
+            or not isinstance(route['steps'], list) or not 1 <= len(route['steps']) <= 4):
+        raise OpenAIError(502, 'OpenAI returned an invalid Orbit tool request.')
+    seen = set()
+    for group in route['steps']:
+        if not isinstance(group, list) or not 1 <= len(group) <= 3:
+            raise OpenAIError(502, 'OpenAI returned an invalid Orbit tool group.')
+        for key in group:
+            if not isinstance(key, str) or key not in ('memory', 'web', 'analysis', 'files') or not capabilities[key] or key in seen:
+                raise OpenAIError(502, 'OpenAI requested an unavailable or repeated Orbit tool.')
+            seen.add(key)
+    files = 'files' in seen
+    if files and route['steps'][-1] != ['files']:
+        raise OpenAIError(502, 'OpenAI requested files before their supporting tools finished.')
+    result = {'steps': route['steps'][:-1] if files else route['steps'], 'files': files}
+    if route.get('inputs') is not None:
+        inputs = route['inputs']
+        if not isinstance(inputs, dict) or set(inputs) - {'web','analysis','memory'}:
+            raise OpenAIError(502, 'OpenAI returned invalid Orbit tool inputs.')
+        result['inputs'] = {}
+        for key, value in inputs.items():
+            if value is None:
+                continue
+            if key not in seen or not isinstance(value, dict):
+                raise OpenAIError(502, 'OpenAI supplied inputs for an unrequested Orbit tool.')
+            result['inputs'][key] = value  # Workers validate before execution or mutation.
+    return result
+
+
 class ResponsesStream:
     """Incremental native Responses SSE → Orbit's existing chat stream contract."""
-    def __init__(self):
+    def __init__(self, capabilities=None):
+        self.capabilities = capabilities
+        self.tool_started = False
+        self.tool_argument_size = 0
         self.decoder = codecs.getincrementaldecoder('utf-8')('strict')
         self.buffer = ''
         self.skip_lf = False
@@ -111,6 +186,18 @@ class ResponsesStream:
                 if not isinstance(delta, str):
                     raise OpenAIError(502, 'OpenAI sent an invalid text event.')
                 yield {'choices': [{'delta': {'content': delta}}]}
+            elif kind == 'response.output_item.added' and isinstance(data.get('item'), dict) and data['item'].get('type') == 'function_call':
+                if self.capabilities is None or self.tool_started or data['item'].get('name') != 'orbit_tools':
+                    raise OpenAIError(502, 'OpenAI returned an unexpected tool call.')
+                self.tool_started = True
+                yield {'orbit_tool_pending': True, 'choices': []}
+            elif kind == 'response.function_call_arguments.delta':
+                delta = data.get('delta')
+                if not self.tool_started or not isinstance(delta, str):
+                    raise OpenAIError(502, 'OpenAI returned an invalid tool argument event.')
+                self.tool_argument_size += len(delta)
+                if self.tool_argument_size > 65536:
+                    raise OpenAIError(502, 'OpenAI returned an oversized tool request.')
             elif kind == 'response.output_item.added' and isinstance(data.get('item'), dict) and data['item'].get('type') == 'reasoning':
                 yield {'orbit_thinking': True, 'choices': []}
             elif kind in ('response.completed', 'response.incomplete', 'response.failed'):
@@ -130,6 +217,16 @@ class ResponsesStream:
                     reason = {'max_output_tokens': 'length', 'content_filter': 'content_filter'}.get(incomplete)
                     if not reason:
                         raise OpenAIError(502, 'OpenAI returned an incomplete answer. Partial text was kept; retry manually.')
+                output = response.get('output', [])
+                if not isinstance(output, list):
+                    raise OpenAIError(502, 'OpenAI returned an invalid output list.')
+                calls = [item for item in output if isinstance(item, dict) and item.get('type') == 'function_call']
+                if self.tool_started or calls:
+                    if (kind != 'response.completed' or self.capabilities is None or len(calls) != 1
+                            or calls[0].get('name') != 'orbit_tools' or calls[0].get('status') != 'completed'):
+                        raise OpenAIError(502, 'OpenAI did not complete a valid Orbit tool request. No tools were started.')
+                    route = validate_route(calls[0].get('arguments'), self.capabilities)
+                    yield {'orbit_tool_route': route, 'choices': []}
                 self.finished = True
                 yield {'choices': [{'delta': {}, 'finish_reason': reason}]}
                 return
@@ -306,8 +403,15 @@ class OpenAIGateway:
             payload['text'] = {'format': {'type': 'json_object'}}
             if not any('json' in str(m['content']).lower() for m in clean):
                 clean.insert(0, {'role': 'system', 'content': 'Return a valid JSON object.'})
+        if 'orbit_tools' in raw:
+            capabilities = routing_capabilities(raw['orbit_tools'])
+            if raw.get('response_format'):
+                raise OpenAIError(400, 'Tool selection cannot also request a structured answer.')
+            if any(capabilities.values()):
+                payload.update(tools=[route_function(capabilities)], tool_choice='auto', parallel_tool_calls=False)
         # Never forward arbitrary tools, temperature, storage, URLs or credentials.
-        # Orbit's existing Analyze, web and file workflows consume text/JSON.
+        # Only the fixed local dispatcher above is registered; Orbit executes it.
+
         return payload
 
     def handle(self, handler, path, method):
@@ -367,6 +471,7 @@ class OpenAIGateway:
             handler.send_response(200)
             handler.send_header('Content-Type', 'text/event-stream; charset=utf-8')
             handler.send_header('Cache-Control', 'no-store')
+            handler.send_header('X-Orbit-Tool-Routing', '3')
             handler.send_header('X-Content-Type-Options', 'nosniff')
             timing = getattr(connection, 'orbit_timing', None)
             if isinstance(timing, dict):
@@ -376,7 +481,7 @@ class OpenAIGateway:
                     if isinstance(timing.get(phase), (int, float)) and timing[phase] >= 0))
             handler.end_headers()
             started = True
-            stream = ResponsesStream()
+            stream = ResponsesStream(raw.get('orbit_tools'))
             while not stream.finished:
                 chunk = response.read1(65536)
                 if not chunk:

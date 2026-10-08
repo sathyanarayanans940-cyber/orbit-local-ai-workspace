@@ -152,11 +152,12 @@ async function searchAsync(chats,entries,query,ids=[],signal,isCurrent=()=>true,
   if(++ticks%32===0&&Date.now()-start>=8){await new Promise(resolve=>setTimeout(resolve,0));start=Date.now();}
  }
 }
-async function recall({prompt,scopePrompt=prompt,chats,current,deleted,model,plan,onStatus,signal,isCurrent=()=>true}){
+async function recall({prompt,scopePrompt=prompt,chats,current,deleted,model,plan,onStatus,signal,isCurrent=()=>true,profileOnly=false,initialPlan}){
  const limits=budgets(model);
  let profile=profileContext(model,'',scopePrompt);
  if(!enabled(model)) return profile;
  if(signal?.aborted) throw new DOMException('Aborted','AbortError');
+ if(profileOnly) return profileContext(model,'No learned preferences were changed this turn.',scopePrompt);
  const entries=catalog(chats,current,deleted);
 
  onStatus?.('Checking memories');
@@ -181,7 +182,10 @@ async function recall({prompt,scopePrompt=prompt,chats,current,deleted,model,pla
   for(const item of applicablePreferences(scopePrompt).map(({scope,key,value})=>({scope,key,value}))){payload.learnedPreferences.push(item);if(!fits()){payload.learnedPreferences.pop();break;}if(byteSize(payload.learnedPreferences)>1400){payload.learnedPreferences.pop();break;}}
   for(const item of selected){payload.catalog.push(item);if(!fits()){payload.catalog.pop();break;}}
   messages[1].text=JSON.stringify(payload);
-  const response=await plan(messages);
+  const prepared=initialPlan && ['none','summaries','search'].includes(initialPlan.action) &&
+    (initialPlan.action!=='search'||typeof initialPlan.query==='string'&&initialPlan.query.trim()&&initialPlan.query.length<=400) &&
+    Array.isArray(initialPlan.preferenceUpdates)&&initialPlan.preferenceUpdates.length<=8;
+  const response=prepared?JSON.stringify(initialPlan):await plan(messages);
   const parsed=JSON.parse(String(response).replace(/^\s*```(?:json)?\s*|\s*```\s*$/g,''));
   if(['none','summaries','search'].includes(parsed.action)) {action=parsed;updates=parsed.preferenceUpdates;}else throw new Error('Invalid memory plan');
  }catch(error){if(signal?.aborted) throw error;planningFailed=true;}
@@ -214,5 +218,5 @@ async function recall({prompt,scopePrompt=prompt,chats,current,deleted,model,pla
  for(const item of selected.filter(e=>allowed.has(e.id))){payload.summaries.push(item);if(!fits())payload.summaries.pop();if(payload.summaries.length>=3)break;}
  return preface+'\n\n'+JSON.stringify(payload);
 }
-const api={preferences,save,small,enabled,synopsis,catalog,search,searchAsync,recall,learned,budgets};root.OrbitMemories=api;if(typeof module!=='undefined')module.exports=api;
+const api={preferences,save,small,enabled,synopsis,catalog,search,searchAsync,recall,learned,budgets,profile:(model,prompt)=>profileContext(model,'No learned preferences have been changed this turn. Request the memory tool to save or forget preferences.',prompt)};root.OrbitMemories=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

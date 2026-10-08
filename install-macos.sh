@@ -198,6 +198,7 @@ ASSETS=(
   file-preview.js
   archives.js
   analyze.js
+  document-format.js
   document-assets.js
   document-edits.js
   workspace-core.js

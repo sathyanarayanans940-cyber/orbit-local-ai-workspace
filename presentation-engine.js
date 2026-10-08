@@ -36,7 +36,7 @@ export function fittedFont(value,w,h,size,bold=false){
 export async function generatePresentation(spec,{images={},preview=false}={}){
  const deck=preview?new PresentationPreview():new PptxGenJS(),t=THEMES[spec.theme]||THEMES.midnight;deck.layout='LAYOUT_WIDE';deck.author='Orbit';deck.title=spec.title;deck.subject=spec.title;deck.lang='en-US';deck.theme={headFontFace:'Arial',bodyFontFace:'Arial',lang:'en-US'};
  const W=13.333,H=7.5,M=.72;
- spec.slides.forEach(s=>{
+ spec.slides.forEach((s,slideIndex)=>{try{
   const startIndex=deck.slides.length;
   const slide=deck.addSlide();
   const layout=s.layout==='auto'||!s.layout?(s.image?'visual':s.columns?'split':s.metrics?'metrics':s.steps?'timeline':s.quote?'quote':'bullets'):s.layout;
@@ -61,6 +61,7 @@ export async function generatePresentation(spec,{images={},preview=false}={}){
    const top=s.subtitle?2.95:2.65,bottom=6.67,available=bottom-top;
    if(s.image){
     const v=images[s.image.assetId];if(!v?.dataUrl)throw Error('An uploaded or generated visual is unavailable.');
+    if(!/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(v.dataUrl)||![v.width,v.height].every(n=>Number.isFinite(n)&&n>0))throw Error('The image has invalid data or dimensions. Reattach the original image.');
     const ratio=v.width/v.height,side=!!s.bullets.length&&ratio<=2.8;
     const bulletArea=side?available:Math.min(available*.5,s.bullets.length*.6),bulletRow=bulletArea/Math.max(1,s.bullets.length);
     const box={x:side?5.45:M,y:top+(side?0:bulletArea),w:side?7.14:W-2*M,h:available-(s.image.caption?.length ? .7 : 0)-(side?0:bulletArea)};
@@ -97,6 +98,6 @@ export async function generatePresentation(spec,{images={},preview=false}={}){
    page.addText(String(startIndex+offset+1).padStart(2,'0'),{x:W-M-.5,y:7.07,w:.5,h:.18,fontFace:'Arial',fontSize:9,color:muted,margin:0,align:'right'});
    if(s.notes)page.addNotes(s.notes);
   });
- });
+ }catch(error){throw Error(`Slide ${slideIndex+1} (${s.title}): ${error.message}`);}});
  return deck.write({outputType:'blob'});
 }

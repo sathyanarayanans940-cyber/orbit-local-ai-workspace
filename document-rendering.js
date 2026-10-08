@@ -7,6 +7,7 @@ import 'mathjax-full/js/input/tex/base/BaseConfiguration.js';
 import 'mathjax-full/js/input/tex/ams/AmsConfiguration.js';
 import {renderAsync} from 'docx-preview';
 import JSZip from 'jszip';
+import {rasterizeSvg} from './svg-raster.js';
 const adaptor=liteAdaptor();RegisterHTMLHandler(adaptor);
 const mathDocument=mathjax.document('',{InputJax:new TeX({packages:['base','ams'],maxBuffer:8000,maxMacros:500}),OutputJax:new SVG({fontCache:'none'})});
 export function mathSvg(latex){
@@ -21,10 +22,8 @@ export function mathSvg(latex){
  return {svg,width,height};
 }
 export async function mathImage(latex,{transparent=false,color='#172334'}={}){
- const rendered=mathSvg(latex),{width,height}=rendered,svg=rendered.svg.replace(/#172334/g,color),canvas=document.createElement('canvas');
- const scale=Math.min(6,4200/Math.max(width,height));canvas.width=Math.ceil(width*scale);canvas.height=Math.ceil(height*scale);
- const image=new Image(),url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
- try{await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(Error('Equation rendering failed.'));image.src=url;});const ctx=canvas.getContext('2d');if(!transparent){ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);}ctx.drawImage(image,0,0,canvas.width,canvas.height);return {dataUrl:canvas.toDataURL('image/png'),width:canvas.width,height:canvas.height,displayWidth:width,displayHeight:height,label:latex,svg};}finally{URL.revokeObjectURL(url);}
+ const rendered=mathSvg(latex),{width,height}=rendered,svg=rendered.svg.replace(/#172334/g,color);
+ return {...await rasterizeSvg(svg,width,height,{scale:6,transparent,label:'Equation'}),displayWidth:width,displayHeight:height,label:latex,svg};
 }
 export const documentThemes={classic:{accent:'334155',tint:'F1F5F9'},ocean:{accent:'087F8C',tint:'EFF8F8'},forest:{accent:'326B50',tint:'F0F6F1'},plum:{accent:'795487',tint:'F7F2F9'},terracotta:{accent:'A74E36',tint:'FCF2EC'},slate:{accent:'4B6485',tint:'F0F4FA'}};
 export function documentStyle(spec){const s=spec.style||{};return {...{font:'sans',border:'none',pageSize:'A4'},...s,...(documentThemes[s.theme]||documentThemes.classic),...(s.accent?{accent:s.accent}:{})};}

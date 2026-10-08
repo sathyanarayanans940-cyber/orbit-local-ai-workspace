@@ -10,6 +10,7 @@ import {pdfBlob,keepHeadingWithBody} from './pdf-layout.js';
 import {formulaRows,shortFormulaRow} from './formula-layout.js';
 import {mathSvg,mathImage,documentStyle,wordPreview} from './document-rendering.js';
 export {mathSvg,wordPreview};
+export {rasterizeSvg} from './svg-raster.js';
 pdfMake.addVirtualFileSystem({...fonts,...extraFonts});
 pdfMake.addFonts({Roboto:{normal:'Roboto-Regular.ttf',bold:'Roboto-Medium.ttf',italics:'Roboto-Italic.ttf',bolditalics:'Roboto-MediumItalic.ttf'}});
 for(const family of ['Serif','Mono','Symbols'])pdfMake.addFonts({[family]:Object.fromEntries(['normal','bold','italics','bolditalics'].map(style=>[style,`${family}-${style}.woff`]))});
@@ -77,21 +78,33 @@ export async function generate(spec,{images={},visuals={},preview=false}={}) {
     return pdfBlob(pdfMake,{pageBreakBefore:keepHeadingWithBody,info:{title:spec.title,author:'Orbit'},pageSize:style.pageSize,pageMargins:[44,48,44,48],background:(_,size)=>style.border==='none'?null:{canvas:style.border==='frame'?[{type:'rect',x:23,y:23,w:size.width-46,h:size.height-46,lineColor:accent,lineWidth:.6}]:[{type:'line',x1:44,y1:29,x2:size.width-44,y2:29,lineColor:accent,lineWidth:2}]},defaultStyle:{font:pdfFont,color:'#243244',fontSize:11,lineHeight:1.15},styles:{title:{fontSize:26,bold:true,color:accent,margin:[0,0,0,22]},heading:{fontSize:16,bold:true,color:accent,margin:[0,14,0,8]},subheading:{fontSize:13,bold:true,color:accent,margin:[0,12,0,6]}},content,footer:(page,total)=>({text:`${page} / ${total}`,alignment:'center',fontSize:9,color:'#6b7280'})},{compact:!spec.blocks.some(b=>b.type==='pageBreak')});
   }
   if(spec.kind==='docx') {
-    const run = (text, options = {}) => new TextRun({text,font:wordFont,color:'243244',size:22,...options});
-    const wordText = (value, options = {}) => runs(value).flatMap(r => r.text.replace(/\r\n?/g,'\n').split('\n').map((line,i) => run(line,{...options,...(i?{break:1}:{}),...(r.bold?{bold:true}:{}),...(r.italic?{italics:true}:{}),...(r.underline?{underline:{type:UnderlineType.SINGLE}}:{}),...(r.color?{color:r.color}:{})})));
-    const children=[new Paragraph({children:[run(spec.title,{size:48,bold:true,color:style.accent})],heading:HeadingLevel.TITLE,spacing:{after:300}})];
+    if(spec.style?.templateId)throw Error('Resolve the selected Word formatting sample before export.');
+    const custom=spec.style?.word||{};
+    const role=(name,defaults={})=>({...{font:wordFont,color:'243244',size:11},...custom.body,...defaults,...(name==='body'?{}:custom[name])});
+    const runOptions=(name,defaults={})=>{const r=role(name,defaults);return {font:r.font,color:r.color,size:r.size*2,...(r.bold!==undefined?{bold:r.bold}:{}),...(r.italic!==undefined?{italics:r.italic}:{}),...(r.underline!==undefined?{underline:{type:r.underline?UnderlineType.SINGLE:UnderlineType.NONE}}:{})};};
+    const paragraphOptions=(name,defaults={})=>{const r=role(name),spacing={...defaults.spacing};for(const [key,field] of [['spaceBefore','before'],['spaceAfter','after']])if(r[key]!==undefined)spacing[field]=r[key]*20;if(r.lineSpacing!==undefined){spacing.line=r.lineSpacing*240;spacing.lineRule='auto';}return {...defaults,...(r.alignment?{alignment:r.alignment==='justify'?AlignmentType.JUSTIFIED:r.alignment}:{}),spacing};};
+    const page=custom.page||{},pageSize={width:Math.round((page.width||(style.pageSize==='Letter'?8.5:11906/1440))*1440),height:Math.round((page.height||(style.pageSize==='Letter'?11:16838/1440))*1440)};
+    const margins=Object.fromEntries(['top','right','bottom','left'].map(k=>[k,Math.round((page.margins?.[k]??1)*1440)]));
+    const contentWidth=pageSize.width-margins.left-margins.right,contentHeight=pageSize.height-margins.top-margins.bottom;
+    if(contentWidth<2880||contentHeight<2880)throw Error('Word margins leave less than two inches for content. Reduce the margins or enlarge the page.');
+    const imageWidth=contentWidth/15,imageHeight=Math.min(650,contentHeight/15-60);
+    let borders=style.border==='none'?undefined:Object.fromEntries((style.border==='frame'?['Top','Right','Bottom','Left']:['Top']).map(side=>['pageBorder'+side,{color:style.accent,style:BorderStyle.SINGLE,size:6,space:24}]));
+    if(page.borders){borders={...(borders||{}),pageBorders:{offsetFrom:page.borderOffset||'page'}};for(const [side,b] of Object.entries(page.borders))borders['pageBorder'+side[0].toUpperCase()+side.slice(1)]={style:b.style,color:b.color||'000000',size:Math.round((b.width??.75)*8),space:b.space??24};}
+    const run = (text, options = {}) => new TextRun({text,...runOptions('body'),...options});
+    const wordText = (value, options = {}) => runs(value).flatMap(r => r.text.replace(/\r\n?/g,'\n').split('\n').map((line,i) => run(line,{...options,...(i?{break:1}:{}),...(r.bold?{bold:true}:{}),...(r.italic?{italics:true}:{}),...(r.underline?{underline:{type:UnderlineType.SINGLE}}:{}),...(r.color?{color:r.color}:{}),...(r.font?{font:r.font}:{}),...(r.size?{size:r.size*2}:{})})));
+    const children=[new Paragraph({children:[run(spec.title,runOptions('title',{size:24,bold:true,color:style.accent}))],heading:HeadingLevel.TITLE,...paragraphOptions('title',{spacing:{after:300}})})];
     let pageBreak = false;
     spec.blocks.forEach((b,index)=> {
       const callout=b.tone==='success'?{accent:'326B50',tint:'F0F6F1'}:b.tone==='warning'?{accent:'94601F',tint:'FFF7E9'}:style;
       if(b.type==='pageBreak') { pageBreak = children.length > 1; return; }
-      if(b.type==='math'){const v=equations[index],size=fitted({width:v.displayWidth,height:v.displayHeight},624,650);children.push(new Paragraph({pageBreakBefore:pageBreak,alignment:AlignmentType.CENTER,children:[new ImageRun({type:'png',data:Uint8Array.from(atob(v.dataUrl.split(',')[1]),c=>c.charCodeAt(0)),transformation:size,altText:{title:'Equation',description:b.latex,name:'Equation'}})],spacing:{before:150,after:150},keepNext:!!b.caption}));if(b.caption)children.push(new Paragraph({alignment:AlignmentType.CENTER,children:[run(b.caption,{size:18,italics:true})],spacing:{after:160}}));}
+      if(b.type==='math'){const v=equations[index],size=fitted({width:v.displayWidth,height:v.displayHeight},imageWidth,imageHeight);children.push(new Paragraph({pageBreakBefore:pageBreak,alignment:AlignmentType.CENTER,children:[new ImageRun({type:'png',data:Uint8Array.from(atob(v.dataUrl.split(',')[1]),c=>c.charCodeAt(0)),transformation:size,altText:{title:'Equation',description:b.latex,name:'Equation'}})],spacing:{before:150,after:150},keepNext:!!b.caption}));if(b.caption)children.push(new Paragraph({children:[run(b.caption,runOptions('caption',{size:9,italic:true}))],...paragraphOptions('caption',{alignment:AlignmentType.CENTER,spacing:{after:160}})}));}
       if(b.type==='formula'){
         const rows=formulaRows(b);
         rows.forEach((row,rowIndex)=>{
           children.push(new Paragraph({pageBreakBefore:pageBreak&&rowIndex===0,alignment:AlignmentType.CENTER,children:wordText(row.text,{size:24}),spacing:{before:100,after:row.condition?60:b.caption?100:180,line:300},keepNext:!!row.condition||!!b.caption&&rowIndex===rows.length-1,widowControl:true}));
           if(row.condition)children.push(new Paragraph({alignment:AlignmentType.CENTER,children:wordText(row.condition,{size:22,color:'536174'}),spacing:{after:b.caption&&rowIndex===rows.length-1?100:180,line:280},keepNext:!!b.caption&&rowIndex===rows.length-1,widowControl:true}));
         });
-        if(b.caption)children.push(new Paragraph({alignment:AlignmentType.CENTER,children:[run(b.caption,{size:18,italics:true})],spacing:{after:180}}));
+        if(b.caption)children.push(new Paragraph({children:[run(b.caption,runOptions('caption',{size:9,italic:true}))],...paragraphOptions('caption',{alignment:AlignmentType.CENTER,spacing:{after:180}})}));
       }
       if(b.type==='divider')children.push(new Paragraph({pageBreakBefore:pageBreak,border:{bottom:{color:style.accent,style:BorderStyle.SINGLE,size:6,space:6}},spacing:{before:120,after:200}}));
       if(b.type==='callout'){
@@ -100,14 +113,22 @@ export async function generate(spec,{images={},visuals={},preview=false}={}) {
         children.push(new Table({width:{size:100,type:WidthType.PERCENTAGE},rows:[new TableRow({cantSplit:shortCallout(b),children:[new TableCell({shading:{fill:callout.tint},margins:{top:160,bottom:160,left:240,right:240},borders:{top:noBorder,bottom:noBorder,right:noBorder,left:{color:callout.accent,style:BorderStyle.SINGLE,size:18}},children:[...(b.title?[new Paragraph({children:[run(b.title,{bold:true,color:callout.accent})],spacing:{after:100},keepNext:true})]:[]),new Paragraph({children:wordText(b.text),spacing:{after:0,line:280}})]})]})]}));
         children.push(new Paragraph({spacing:{before:0,after:120},children:[]}));
       }
-      if(b.type==='image'){const v=image(b),size=fitted(v,624*b.widthPercent/100,650);children.push(new Paragraph({pageBreakBefore:pageBreak,alignment:AlignmentType.CENTER,children:[new ImageRun({type:v.dataUrl.startsWith('data:image/png')?'png':'jpg',data:Uint8Array.from(atob(v.dataUrl.split(',')[1]),c=>c.charCodeAt(0)),transformation:size,altText:{title:b.caption||'Uploaded image',description:b.caption||v.label||'Uploaded image',name:'Image'}})],spacing:{before:120,after:100},keepNext:!!b.caption}));if(b.caption)children.push(new Paragraph({alignment:AlignmentType.CENTER,children:[run(b.caption,{size:18,italics:true})],spacing:{after:160}}));}
-      if(b.type==='heading') children.push(new Paragraph({children:wordText(b.text,{size:b.level===2?26:32,bold:true,color:style.accent}),pageBreakBefore:pageBreak,heading:b.level===2?HeadingLevel.HEADING_2:HeadingLevel.HEADING_1,keepNext:true,spacing:{before:240,after:140}}));
-      if(b.type==='paragraph') children.push(new Paragraph({children:wordText(b.text),pageBreakBefore:pageBreak,spacing:{after:180}}));
-      if(b.type==='code') children.push(...b.text.replace(/\t/g,'    ').split('\n').map((line,i)=>new Paragraph({children:[run(line || ' ',{font:'Courier New',size:20})],pageBreakBefore:pageBreak && i===0,spacing:{before:i===0?80:0,after:i===b.text.replace(/\t/g,'    ').split('\n').length-1?180:0,line:240},keepNext:false,widowControl:false})));
-      if(b.type==='bullets') children.push(...b.items.map((text,i)=>new Paragraph({children:wordText(text),pageBreakBefore:pageBreak && i===0,bullet:{level:0},spacing:{after:100}})));
+      if(b.type==='image'){const v=image(b),size=fitted(v,imageWidth*b.widthPercent/100,imageHeight);children.push(new Paragraph({pageBreakBefore:pageBreak,alignment:AlignmentType.CENTER,children:[new ImageRun({type:v.dataUrl.startsWith('data:image/png')?'png':'jpg',data:Uint8Array.from(atob(v.dataUrl.split(',')[1]),c=>c.charCodeAt(0)),transformation:size,altText:{title:b.caption||'Uploaded image',description:b.caption||v.label||'Uploaded image',name:'Image'}})],spacing:{before:120,after:100},keepNext:!!b.caption}));if(b.caption)children.push(new Paragraph({children:[run(b.caption,runOptions('caption',{size:9,italic:true}))],...paragraphOptions('caption',{alignment:AlignmentType.CENTER,spacing:{after:160}})}));}
+      if(b.type==='heading') children.push(new Paragraph({children:wordText(b.text,runOptions(b.level===2?'heading2':'heading1',{size:b.level===2?13:16,bold:true,color:style.accent})),pageBreakBefore:pageBreak,heading:b.level===2?HeadingLevel.HEADING_2:HeadingLevel.HEADING_1,keepNext:true,...paragraphOptions(b.level===2?'heading2':'heading1',{spacing:{before:240,after:140}})}));
+      if(b.type==='paragraph') children.push(new Paragraph({children:wordText(b.text),pageBreakBefore:pageBreak,...paragraphOptions('body',{spacing:{after:180}})}));
+      if(b.type==='code') {
+        const lines=b.text.replace(/\t/g,'    ').split('\n');
+        children.push(...lines.map((line,i)=>{
+          const options=paragraphOptions('code',{spacing:{before:80,after:180,line:240}});
+          // Paragraph spacing belongs around the code block, not between its source lines.
+          if(i>0)options.spacing.before=0;if(i<lines.length-1)options.spacing.after=0;
+          return new Paragraph({style:'OrbitCode',children:[run(line || ' ',runOptions('code',{font:'Courier New',size:10}))],pageBreakBefore:pageBreak && i===0,...options,keepNext:false,widowControl:false});
+        }));
+      }
+      if(b.type==='bullets') children.push(...b.items.map((text,i)=>new Paragraph({children:wordText(text),pageBreakBefore:pageBreak && i===0,bullet:{level:0},...paragraphOptions('body',{spacing:{after:100}})})));
       if(b.type==='table') {
         if (pageBreak) children.push(new Paragraph({pageBreakBefore:true,spacing:{after:0,before:0}}));
-        const tableWidth=style.pageSize==='Letter'?9360:9026;
+        const tableWidth=contentWidth;
         const columnWidth = Math.floor(tableWidth / b.headers.length);
         const rows=[b.headers,...b.rows];
         // Keep compact data rows intact. Long prose cells must remain able to
@@ -116,12 +137,12 @@ export async function generate(spec,{images={},visuals={},preview=false}={}) {
         const rowHeight=row=>200+280*Math.max(...row.map(value=>runs(value).map(r=>r.text).join('').split(/\r\n?|\n/).reduce((n,line)=>n+Math.max(1,Math.ceil(line.length/charsPerLine)),0)));
         const compact=row=>rowHeight(row)<=5600;
         const small=rows.length<=4&&rows.reduce((n,row)=>n+rowHeight(row),0)<=3600;
-        children.push(new Table({width:{size:tableWidth,type:WidthType.DXA},columnWidths:b.headers.map(()=>columnWidth),layout:TableLayoutType.FIXED,rows:rows.map((row,i)=>new TableRow({tableHeader:i===0,cantSplit:compact(row),children:row.map(text=>new TableCell({width:{size:columnWidth,type:WidthType.DXA},margins:{top:100,bottom:100,left:120,right:120},shading:i===0?{fill:style.tint}:undefined,children:[new Paragraph({children:wordText(text,{bold:i===0,...(i===0?{color:style.accent}:{})}),keepNext:small&&i<rows.length-1})]}))}))}));
+        children.push(new Table({width:{size:tableWidth,type:WidthType.DXA},columnWidths:b.headers.map(()=>columnWidth),layout:TableLayoutType.FIXED,rows:rows.map((row,i)=>new TableRow({tableHeader:i===0,cantSplit:compact(row),children:row.map(text=>new TableCell({width:{size:columnWidth,type:WidthType.DXA},margins:{top:100,bottom:100,left:120,right:120},shading:i===0?{fill:style.tint}:undefined,children:[new Paragraph({children:wordText(text,runOptions(i===0?'tableHeader':'tableBody',{bold:i===0,...(i===0?{color:style.accent}:{})})),keepNext:small&&i<rows.length-1,...paragraphOptions(i===0?'tableHeader':'tableBody')})]}))}))}));
         children.push(new Paragraph({text:'',spacing:{after:160}}));
       }
       pageBreak = false;
     });
-    return Packer.toBlob(new Document({creator:'Orbit',title:spec.title,styles:{default:{document:{run:{font:wordFont,size:22},paragraph:{spacing:{after:160}}}}},sections:[{properties:{page:{size:style.pageSize==='Letter'?{width:12240,height:15840}:{width:11906,height:16838},borders:style.border==='none'?undefined:Object.fromEntries((style.border==='frame'?['Top','Right','Bottom','Left']:['Top']).map(side=>['pageBorder'+side,{color:style.accent,style:BorderStyle.SINGLE,size:6,space:24}])),margin:{top:1440,bottom:1440,left:1440,right:1440}}},footers:{default:new Footer({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({children:[PageNumber.CURRENT,' / ',PageNumber.TOTAL_PAGES],size:18,color:'64748B'})]})]})},children}]}));
+    return Packer.toBlob(new Document({creator:'Orbit',title:spec.title,styles:{default:{document:{run:runOptions('body'),paragraph:paragraphOptions('body',{spacing:{after:160}})}},paragraphStyles:[{id:'OrbitCode',name:'Code',run:runOptions('code',{font:'Courier New',size:10}),paragraph:paragraphOptions('code')},{id:'Title',name:'Title',run:runOptions('title',{size:24,bold:true,color:style.accent}),paragraph:paragraphOptions('title')},{id:'Heading1',name:'Heading 1',run:runOptions('heading1',{size:16,bold:true,color:style.accent}),paragraph:paragraphOptions('heading1')},{id:'Heading2',name:'Heading 2',run:runOptions('heading2',{size:13,bold:true,color:style.accent}),paragraph:paragraphOptions('heading2')}]},sections:[{properties:{page:{size:pageSize,borders,margin:margins}},...(custom.pageNumbers===false?{}:{footers:{default:new Footer({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({children:[PageNumber.CURRENT,' / ',PageNumber.TOTAL_PAGES],size:18,color:'64748B'})]})]})}}),children}]}));
   }
   if(spec.kind==='pptx') return generatePresentation(spec,{images,preview});
   throw new Error('Unsupported file format.');

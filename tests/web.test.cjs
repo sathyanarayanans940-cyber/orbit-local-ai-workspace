@@ -256,3 +256,35 @@ test('planner bypass never generalizes private chat/upload contents into a searc
   assert.equal(calls,0);assert.equal(result.sources.length,0);
  }
 });
+
+test('prepared public query searches immediately and reads independent pages concurrently',async()=>{
+ let plans=0,active=0,peak=0;const queries=[];
+ const {api}=web(async(url,options)=>{
+  const p=JSON.parse(options.body);
+  if(url.endsWith('/search')){queries.push(p.query);return {ok:true,json:async()=>({results:[1,2].map(n=>({url:`https://example.org/page${n}`,title:'Source '+n,content:'Excerpt '+n}))})};}
+  active++;peak=Math.max(active,peak);await new Promise(r=>setTimeout(r,5));active--;
+  return {ok:true,json:async()=>({content:'Actual page '+p.url})};
+ });
+ const result=await api.research('Search current stable Python version',[],{initialPlan:{action:'search',query:'Python current stable release version official documentation downloads',url:''},plan:()=>{plans++;assert.fail('redundant planner');}});
+ assert.equal(plans,0);assert.deepEqual(queries,['Python current stable release version official documentation downloads']);assert.equal(result.sources.length,2);assert.equal(peak,2);assert.ok(result.retrievedSources.every(s=>s.retrieval==='page'));
+});
+test('private or malformed prepared queries fall back to isolated planning, not network leakage',async()=>{
+ for(const query of ['secretProjectZebra','person@example.com','api_key=abcdef','x'.repeat(401),'']){
+  let plans=0;const sent=[];
+  const {api}=web(async(url,options)=>{sent.push(JSON.parse(options.body));return {ok:true,json:async()=>({results:[]})};});
+  const result=await api.research('Search Python references',[{role:'user',text:'Search Python references',modelText:'secretProjectZebra',attachments:[{extractedText:'secretProjectZebra'}]},{role:'assistant',text:'secretProjectZebra'}],{initialPlan:{action:'search',query},plan:async messages=>{plans++;assert.doesNotMatch(JSON.stringify(messages),/secretProjectZebra/);return '{"action":"search","query":"Python references"}';}});
+  assert.equal(plans,1);assert.equal(sent[0].query,'Python references');assert.equal(result.sources.length,0);
+ }
+});
+test('prepared web inputs preserve no-browse, offline, disabled, supplied URL and repair behavior',async()=>{
+ for(const mode of ['prohibited','offline','disabled','abort']){
+  const {api,context}=web(()=>assert.fail('network must not run'));if(mode==='offline')context.navigator.onLine=false;if(mode==='disabled')api.setEnabled(false);
+  const c=new AbortController();if(mode==='abort')c.abort();
+  const p=api.research(mode==='prohibited'?'Do not browse':'Search Python',[],{signal:c.signal,initialPlan:{action:'search',query:'Python'},plan:()=>assert.fail('planner must not run')});
+  if(mode==='abort')await assert.rejects(p,{name:'AbortError'});else assert.equal((await p).sources.length,0);
+ }
+ let planned=0;
+ const {api}=web(async()=>({ok:true,json:async()=>({content:'Public page'})}));
+ const r=await api.research('Read https://example.org/manual',[],{initialPlan:{action:'read',url:'https://example.org/manual'},plan:()=>assert.fail('unnecessary planner')});assert.equal(r.sources.length,1);
+ await api.research('Read https://example.org/manual',[],{initialPlan:{action:'read',url:'https://attacker.org/'},plan:async()=>{planned++;return '{"action":"none"}';}});assert.equal(planned,1);
+});

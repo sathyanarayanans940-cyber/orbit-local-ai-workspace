@@ -4,8 +4,10 @@
   const presentationThemes = Object.freeze({"midnight": "ink / violet", "paper": "cream / rust", "ocean": "navy / teal", "coral": "plum / coral", "forest": "pine / fern", "ember": "charcoal / terracotta", "cobalt": "deep blue / electric blue", "lavender": "aubergine / lilac", "sandstone": "earth / ochre", "cherry": "burgundy / rose", "arctic": "polar navy / glacier", "olive": "ink / botanical gold", "graphite": "carbon / silver", "espresso": "coffee / caramel"});
   const KINDS = ['pdf', 'docx', 'pptx', 'xlsx', 'chart', 'diagram', 'text', 'ipynb', 'zip'];
   const archives = root.OrbitArchives || (typeof require === 'function' ? require('./archives.js') : null);
+  const documentFormat = root.OrbitDocumentFormat || (typeof require === 'function' ? require('./document-format.js') : null);
   const MIME = { text:'text/plain;charset=utf-8', diagram: 'image/svg+xml', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', chart: 'image/svg+xml' };
   const SETTINGS_KEY = 'orbit-widgets-v1';
+  const engineUrl=root.document?.currentScript?.src?new URL('./vendor/widgets/engine.js?v=28',root.document.currentScript.src).href:'./vendor/widgets/engine.js?v=28';
   const charts = root.OrbitCharts || (typeof require === 'function' ? require('./charts.js') : null);
   const escape = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const sourceExtensions = 'txt text md markdown rst tex log csv tsv json jsonl ndjson yaml yml toml ini cfg conf env xml html htm css scss sass less svg js mjs cjs jsx ts tsx py pyi r R c h cc cpp cxx hpp hxx cs java kt kts scala go rs swift m mm php rb pl pm lua sh bash zsh fish ps1 bat cmd sql graphql gql proto vue svelte ipynb asm s f f90 f95 for lisp clj cljs ex exs erl hrl hs lhs ml mli fs fsx vb vbs dart jl nim pas rkt groovy gradle cmake make dockerfile properties gitignore editorconfig lock diff patch'.split(' ');
@@ -14,7 +16,11 @@
   function requestedZip(value){
     const input=String(value||'').replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?^ {0,3}\1[^\n]*$/gm,'').replace(/^\s*>.*$/gm,'').replace(/(["“])[^"”\n]*["”]|'[^'\n]{2,}'/g,match=>/\b(?:create|make|generate|export|give|save|send|return)\b/i.test(match)?'':match);
     return input.split(/[;!?\n]|\s+(?:(?:and\s+)?then|but|also|and(?=\s+(?:return|give|create|make|send|export|do not|don't|don’t)\b))\s+|,\s*(?=(?:do not|don't|don’t|never)\b)/i).some(c=>{
-      if(/\b(?:do not|don't|don’t|never|no zip|without|how|explain|read|inspect|extract|unzip|open|analyze|analyse|review)\b/i.test(c))return false;
+      if(/\b(?:do not|don't|don’t|never|no zip|without)\b/i.test(c))return false;
+      // An explanatory README inside a requested archive is not a question
+      // about ZIPs. Reject read/how-to intent only before the creation action.
+      const action=c.search(/\b(?:create|make|generate|export|download|give|prepare|save|build|convert|send|provide|return|attach|want|need|package|bundle|compress|output|zip)\b/i);
+      if(/\b(?:how|explain|read|inspect|extract|unzip|open|analyze|analyse|review)\b/i.test(c.slice(0,action<0?c.length:action)))return false;
       if(/\b(?:code|script|program|function)\s+(?:that|which|to|for)\b|\b(?:can|does|will) (?:orbit|it)\b/i.test(c))return false;
       return /\b(?:create|make|generate|export|download|give|prepare|save|build|convert|send|provide|return|attach|want|need|package|bundle|compress|output)\b[\s\S]*\bzip\b|\bzip\s+(?:these|those|the|my|all|it|them)\b/i.test(c)||/^(?:(?:bro|please|pls|also|a|as|in|the)\s+)*zip(?:\s+(?:file|archive|too|please|pls|bro))*[.?]*$/i.test(c.trim());
     });
@@ -120,6 +126,7 @@
         if (typeof run.color !== 'string' || !/^#?[0-9a-f]{6}$/i.test(run.color)) throw new Error('Use a six-digit hex text color.');
         result.color = run.color.replace(/^#/, '').toUpperCase();
       }
+      if(run.font!==undefined||run.size!==undefined)Object.assign(result,documentFormat.role({...(run.font!==undefined?{font:run.font}:{}),...(run.size!==undefined?{size:run.size}:{})}));
       return result;
     });
     if (runs.reduce((n,r) => n+r.text.length,0) > limit) throw new Error('Styled text is too long.');
@@ -149,14 +156,42 @@
     if(typeof value.assetId!=='string'||!/^img-[\w-]{1,100}$/.test(value.assetId))throw new Error('Images must reference an uploaded assetId.');
     return {type:'image',assetId:value.assetId,caption:text(value.caption||'',1200),widthPercent:Math.max(20,Math.min(100,Number(value.widthPercent)||100))};
   }
-  function visualSpec(value) {
+  function visualSpec(value,fitLayout=false) {
     if(value?.artifactId) return {artifactId:text(value.artifactId,100)};
     if(value && !value.kind){
       if(Array.isArray(value.nodes) && !value.series)value={...value,kind:'diagram'};
       else if(Array.isArray(value.series) && !value.nodes)value={...value,kind:'chart'};
     }
     if(!value || !['diagram','chart'].includes(value.kind))throw new Error('Embedded visuals must be an Orbit diagram/chart recipe: visual:{kind:"diagram",title:"...",width:1000,height:600,nodes:[...],edges:[...]}, or visual:{kind:"chart",chartType:"bar",labels:[...],series:[...]}, or an existing artifactId.');
-    return normalize(value);
+    try{return normalize(value);}catch(error){
+      if(!fitLayout || value.kind!=='diagram' || !/overlap|does not fit|attributes do not fit|group.*(outside|too wide)/.test(error.message))throw error;
+      // Embedded slide diagrams may need more room after wrapping. Expand the
+      // coordinate system uniformly; never drop nodes, edges, groups or labels.
+      // Standalone algorithm snapshots keep their strict, stable coordinates.
+      const nodes=value.nodes.map(n=>{
+        const node={...n,shape:n.shape||'rect',label:n.label??n.id,width:n.width??140,height:n.height??64};
+        if(['initial','final','fork','join'].includes(node.shape))return {...n};
+        for(let attempt=0;attempt<24;attempt++){
+          const lines=diagramNodeLines(node).length;
+          const needed=node.shape==='entity'?lines*19+24+(node.attributes||[]).reduce((h,a)=>h+diagramAttributeLines(a,node.width).length*18+12,0):Math.ceil(lines*19/(node.shape==='diamond'?.55:node.shape==='circle'?.68:.85));
+          if(node.shape==='circle')node.height=node.width;
+          if(needed<=node.height)break;
+          if(node.width<600)node.width=Math.min(600,node.width+24);
+          else{node.height=Math.max(node.height,Math.min(node.shape==='entity'?1000:400,needed));break;}
+        }
+        if(node.shape==='circle')node.height=node.width;
+        return {...n,width:node.width,height:node.height};
+      });
+      const groups=(value.groups||[]).map(g=>({...g,width:Math.max(g.width,Array.from(g.label||'').length*8+28)}));
+      const width=Math.max(value.width||800,...groups.map(g=>g.x+g.width)),height=Math.max(value.height||500,...groups.map(g=>g.y+g.height));
+      for(const scale of [1,1.25,1.5,2,2.5,3,4]){
+        if(width*scale>2400||height*scale>4000)break;
+        const point=p=>({...p,x:p.x*scale,y:p.y*scale});
+        const candidate={...value,width:width*scale,height:height*scale,nodes:nodes.map(point),groups:groups.map(g=>({...point(g),width:g.width*scale,height:g.height*scale})),edges:(value.edges||[]).map(e=>({...e,...(e.points?{points:e.points.map(point)}:{}),...(e.labelPosition?{labelPosition:point(e.labelPosition)}:{})}))};
+        try{return normalize(candidate);}catch(_){}
+      }
+      throw error;
+    }
   }
   function visualSvg(value) {
     if(value?.artifactId)throw new Error('The referenced visual must be resolved before generation.');
@@ -174,10 +209,8 @@
     const entries=(spec.blocks||spec.slides||[]).map((item,index)=>({item,index})).filter(({item})=>item.visual);
     for(const {item,index} of entries){
       const svg=visualSvg(item.visual),view=svg.match(/viewBox="([^"]+)"/)[1].split(/\s+/).map(Number),width=view[2],height=view[3];
-      const scale=Math.min(3,4200/Math.max(width,height)),canvas=document.createElement('canvas');canvas.width=Math.ceil(width*scale);canvas.height=Math.ceil(height*scale);
-      const image=new Image(),url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
-      try {await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('Diagram/chart could not be rendered for the document.'));image.src=url;});const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0,canvas.width,canvas.height);visuals[index]={dataUrl:canvas.toDataURL('image/png'),width:canvas.width,height:canvas.height,label:item.visual.title};}
-      finally{URL.revokeObjectURL(url);}
+      const label=`${spec.slides?'Slide':'Block'} ${index+1} — ${item.visual.title}`;
+      visuals[index]=await (await engine()).rasterizeSvg(svg,width,height,{label});
     }
     return visuals;
   }
@@ -232,9 +265,12 @@
       throw new Error('Unsupported document block. Use heading, paragraph, formula, math, code, bullets, table, callout, divider, visual, image or pageBreak.');
     });
   }
-  function normalize(raw) {
+  function canonicalKind(kind){
     const aliases={word:'docx',doc:'docx',powerpoint:'pptx',ppt:'pptx',excel:'xlsx',notebook:'ipynb'};
-    if(raw && typeof raw.kind==='string')raw={...raw,kind:aliases[raw.kind.toLowerCase()]||raw.kind.toLowerCase()};
+    return typeof kind==='string'?(aliases[kind.toLowerCase()]||kind.toLowerCase()):kind;
+  }
+  function normalize(raw) {
+    if(raw && typeof raw.kind==='string')raw={...raw,kind:canonicalKind(raw.kind)};
     if (!raw || !KINDS.includes(raw.kind)) throw new Error('Widget kind must be pdf, docx, pptx, xlsx, chart, diagram, text, ipynb or zip; use kind:"docx" for Word.');
     if (JSON.stringify(raw).length > (raw.kind==='zip'?1500000:480000)) throw new Error('This widget is too large. Split it into smaller files.');
     if(raw.kind==='zip')return archives.normalize(raw,normalize);
@@ -323,13 +359,13 @@
     }
     if (raw.kind === 'pptx') {
       spec.theme=Object.hasOwn(presentationThemes,raw.theme)?raw.theme:'midnight';
-      spec.slides = list(raw.slides, 40).map(s => {
+      spec.slides = list(raw.slides, 40).map((s,index) => {try{
         const slide = {title:text(s.title,180),notes:text(s.notes||'',6000),layout:s.layout||'auto',tone:s.tone||'auto',subtitle:text(s.subtitle||'',320),kicker:text(s.kicker||'',60)};
         if(!['auto','cover','section','bullets','split','metrics','timeline','quote','visual'].includes(slide.layout))throw new Error('Choose a supported slide layout.');
         if(!['auto','light','dark','accent'].includes(slide.tone))throw new Error('Slide tone must be light, dark or accent.');
         if(s.image){slide.image=imageBlock(s.image);if(slide.image.caption.length>240)throw new Error('Slide image captions must be 240 characters or fewer. Preserve longer descriptions in slide notes or another slide.');}
         if(s.math){slide.math=text(s.math,4000);slide.caption=text(s.caption||'',240);}
-        if(s.visual){slide.visual=visualSpec(s.visual);slide.caption=text(s.caption||'',240);}
+        if(s.visual){slide.visual=visualSpec(s.visual,true);slide.caption=text(s.caption||'',240);}
         if(s.table)slide.table=table(s.table,10);
         if(s.columns)slide.columns=list(s.columns,3).map(c=>({title:text(c.title,80),body:text(c.body,400)}));
         if(s.metrics)slide.metrics=list(s.metrics,4).map(m=>({value:text(m.value,30),label:text(m.label,70),detail:text(m.detail||'',160)}));
@@ -346,12 +382,18 @@
         if(['cover','section'].includes(slide.layout)&&(primary.length||slide.bullets.length>2))throw new Error('Cover/section slides use title, subtitle and at most two short bullets; put detailed material on another slide.');
         if(!primary.length&&!slide.bullets.length&&!['cover','section'].includes(slide.layout))throw new Error('A slide needs content or a cover/section layout.');
         return slide;
+      }catch(error){throw new Error(`Slide ${index+1}: ${error.message}`);}
       });
     } else {
       spec.blocks = blocks(raw.blocks);
       const style=raw.style||{};
       const choose=(key,allowed,fallback)=>{if(style[key]!==undefined&&!allowed.includes(style[key]))throw new Error('Unsupported document '+key+'. Choose '+allowed.join(', ')+'.');return style[key]||fallback;};
       spec.style={theme:choose('theme',['classic','ocean','forest','plum','terracotta','slate'],'classic'),font:choose('font',['sans','serif','mono'],'sans'),border:choose('border',['none','rule','frame'],'none'),pageSize:choose('pageSize',['A4','Letter'],'A4')};
+      if(style.word!==undefined||style.templateId!==undefined){
+        if(raw.kind!=='docx')throw new Error('Word font families and template styles require kind:"docx". PDF uses its bundled font families.');
+        if(style.word!==undefined)spec.style.word=documentFormat.normalize(style.word);
+        if(style.templateId!==undefined){if(typeof style.templateId!=='string'||!/^fmt-[\w-]{1,100}$/.test(style.templateId))throw new Error('Use an available Word formatting template ID.');spec.style.templateId=style.templateId;}
+      }
       if(style.accent!==undefined){if(!/^#?[0-9a-f]{6}$/i.test(style.accent))throw new Error('Use a six-digit hex accent color.');spec.style.accent=style.accent.replace(/^#/,'').toUpperCase();}
     }
     return spec;
@@ -364,6 +406,23 @@
     if (!KINDS.includes(kind)) return;
     const current = settings(); current[kind] = Boolean(enabled);
     root.localStorage.setItem(SETTINGS_KEY, JSON.stringify(current));
+  }
+  function capabilityInstruction(prompt='') {
+    const active=KINDS.filter(k=>settings()[k]);
+    const details={
+      pdf:'PDF: styled multi-page documents, tables, code, mathematics and embedded visuals',
+      docx:'Word/DOCX: editable documents, supplied sample typography, fonts, page borders and existing-document edits',
+      pptx:'PowerPoint/PPTX: slide decks with varied layouts, speaker notes, tables, uploaded images and embedded charts/diagrams',
+      xlsx:'Excel/XLSX: multi-sheet tables with typed values; no formulas or spreadsheet charts',
+      chart:'charts: bar, horizontal/stacked/percent bar, line, area/stacked area, step, pie/doughnut, scatter/curve, box, Gantt, histogram, heatmap, bubble, waterfall, radar, funnel and treemap',
+      diagram:'diagrams: flowcharts, architecture, ER, UML activity, state machines, trees, graphs, stacks/queues and step-by-step algorithm snapshots',
+      text:'UTF-8 text/source files with requested filename and extension',
+      ipynb:'Jupyter/IPYNB notebooks with Markdown/code cells; unexecuted, no fabricated outputs',
+      zip:'ZIP archives with folders, source/text files, real generated documents and existing uploaded files',
+    };
+    return 'Orbit toolkit inventory (availability, not output schemas): '+(active.length?active.map(k=>details[k]).join('; '):'all file and visual widgets are disabled')+'. Disabled kinds: '+(KINDS.filter(k=>!active.includes(k)).join(', ')||'none')+'. '+
+      'Choose the files stage for an enabled requested format or a useful visual. Numerical comparisons, trends, distributions and functions often benefit from an inline chart; structural relationships and algorithm state changes often benefit from diagrams. Use the actual visual tool when it materially improves the explanation, even when the user simply asks to teach/explain. Do not replace a useful enabled chart/diagram with ASCII art. Combine analysis and files when computed data needs visualization; use supplied already-complete values directly when execution adds no verification. Full schemas are supplied only after selecting the stage. Preserve all requested formats, steps, data, typography and content. '+
+      'Current-turn explicit download authorization: '+JSON.stringify({text:requestedTextFile(prompt),ipynb:requestedNotebookFile(prompt),zip:requestedZip(prompt)})+'. These three kinds require current-turn authorization; earlier requests do not carry forward. Other enabled outputs remain available. Do not create unrequested document exports; offer once when useful. Uploaded questions remain source material unless editing is requested.';
   }
   function instruction(options={}) {
     const enabled = KINDS.filter(k => settings()[k] && (k!=='text'||options.allowTextFiles) && (k!=='ipynb'||options.allowNotebooks||options.allowZipFiles) && (k!=='zip'||options.allowZipFiles));
@@ -383,10 +442,11 @@ Document design: PDF/Word accept top-level "style":{"theme":"classic|ocean|fores
 Mathematics in files: PDF/Word support {"type":"formula","text":"F = m × a\\n= 2 × 3\\n= 6 N","caption":"optional explanation"}. This is ordinary centered text, editable in Word; prefer it for readable formulas and numerical substitutions, with Unicode symbols such as Σ, √, ×, ² or unambiguous linear notation and parentheses. No dollar delimiters or TeX commands in formula text. Conditional formulas and recurrence cases use a separate condition field, for example {"type":"formula","text":"f(x) = x²","condition":"if x ≥ 0","caption":"optional explanation"}. The condition is placed directly below its formula. Use a separate formula block for each case; never align conditions with tabs, padded spaces or improvised columns, and do not squeeze a long formula and its condition onto the same line. Default to one equality step per line, centering each complete line independently. Keep the left side and initial formula together on the first line; begin each later line with =, without indenting it to align equals signs. For multiline LaTeX use gathered, not aligned; use separate formula blocks or JSON newline escapes within one formula block. Explain the steps in surrounding paragraphs. Compact equality chains are allowed if the user explicitly requests brevity. PowerPoint can also use ordinary Unicode formula text in a centered quote or text column; math is optional. LaTeX is OPTIONAL: use {"type":"math","latex":"TeX equation without dollar delimiters","caption":"optional explanation"} for complex fractions, integrals or matrices when it improves readability or is requested. PPT slides accept "math":"TeX equation", layout:"visual", optional caption and at most two short bullets, instead of image/visual/table. JSON-escape every TeX backslash. Plain text fields do not interpret TeX. Equations are rendered offline, not executable code. Split long equations; rendered LaTeX is not an editable Office equation. Do not alter code blocks or intentional chat LaTeX formatting.
 Worked solutions: For question papers, assignment solutions and step-by-step explanations, default to complete working for EVERY question and subpart unless the user explicitly asks for answers only. Analyze checks correctness; it must NOT shorten the solution. Inside the requested file include given data/assumptions, the method and why it applies, formula, actual substitutions, intermediate calculations, final answer with sensible rounding/units, and interpretation. Use working tables where relevant: Pearson/regression need x, y, x², y², xy totals or equivalent centred sums, means, slopes/intercepts and predictions; Spearman needs both rank columns, d, d², their sum and substitution (handle ties correctly); probabilities need the event translated into bounds, distribution parameters and tail/standardisation steps; hypothesis tests need hypotheses, statistic substitution, rejection rule/p-value and conclusion. These are examples, not an exhaustive list: for other subjects use the appropriate derivation, proof, algorithm trace, units or worked examples rather than copying statistics tables. Preserve all supplied subparts and explain any ambiguity instead of inventing values. A formula plus an answer, or a summary table alone, is not step by step. Never promise full working unless it is included. For file-only requests keep the chat introduction brief and put the complete explanation in the file. If the user also asks for the full solution in chat, include complete working in BOTH chat and each requested file; never substitute a short chat summary or refer to the file instead of showing the requested steps. The hidden Analyze log is never the explanation. The renderer adds the document title automatically; do not repeat it as the first heading.
 Embedded visuals: PDF/Word blocks support {"type":"visual","visual":{full Orbit diagram or chart recipe},"caption":"...","widthPercent":100}. PowerPoint slides support "visual":{full Orbit diagram or chart recipe}, "caption":"...", instead of image/table. You can also use "visual":{"artifactId":"ID from the available visuals catalog"} to reuse a prior chat diagram/chart exactly. Put requested diagrams/graphs INSIDE the file recipe; a separate chat visual is not a substitute. Every embedded recipe includes its own kind:"diagram" or kind:"chart", title, and complete data. Diagram example: "visual":{"kind":"diagram","title":"Flow","width":600,"height":220,"nodes":[{"id":"a","label":"Input","x":120,"y":110},{"id":"b","label":"Output","x":440,"y":110}],"edges":[{"from":"a","to":"b"}]}. Use the same diagram/chart schema described above. For a complex diagram give it a full slide and put detail in notes; split very large architecture diagrams into an overview and detailed slides. Never invent chart data.
+Word formatting: For DOCX only, explicit user formatting overrides the selected sample, which overrides Orbit defaults. Use style.templateId from the available Word samples ONLY when asked to follow that sample; never invent IDs or adopt the formatting of an ordinary question paper. Put explicit overrides in style.word. Supported roles: body,title,heading1,heading2,code,caption,tableHeader,tableBody; each accepts {font:"Times New Roman",size:12,color:"000000",bold:false,italic:false,underline:false,alignment:"left|center|right|justify",lineSpacing:1.5,spaceBefore:0,spaceAfter:6}. Sizes and spacing are points; lineSpacing is a multiplier. Word run overrides also accept font and size. Page options: style.word.page:{width:8.5,height:11,margins:{top:1,right:1,bottom:1,left:1},borderOffset:"page|text",borders:{top:{style:"single|double|dashed|dotted|none",color:"000000",width:1,space:24},right:{...},bottom:{...},left:{...}}}. Page dimensions and margins are inches; border width and space are points. Set every side to style:"none" to remove a template border. style.word.pageNumbers:false omits the generated footer. Omit unspecified fields to inherit the sample. When using a sample, do not fill style.word with Orbit defaults. This follows typography and page formatting, not exact template content/layout: headers, logos, decorative borders, custom lists and complex multi-section layouts are not cloned. Font names are preserved in DOCX; unavailable fonts may be substituted by Word. PDF retains its bundled sans/serif/mono choices; do not claim arbitrary DOCX font fidelity in PDF.
 Presentation design: Use metrics for short numeric values or concise measurable targets. For conceptual categories such as Functional, Non-Functional, Constraints and Scope, prefer split columns with a title and body instead of oversized metrics. PPTX theme must be one of ${Object.entries(presentationThemes).map(([name,description])=>name+" ("+description+")").join(", ")}. Honor an explicitly requested theme by setting top-level "theme" to its exact name. Otherwise choose a palette suited to the topic and keep it consistent throughout the deck. Slides support layout auto|cover|section|bullets|split|metrics|timeline|quote|visual; tone auto|light|dark|accent; optional kicker, subtitle. Use varied purposeful layouts, concise titles and readable body text; do not make every slide a bullet list. Split: columns:[{title,body}] (2–3 recommended). Metrics: metrics:[{value,label,detail}] (up to4, supplied facts only). Timeline: steps:[{title,body}] (up to5). Quote: quote, attribution. Cover/section: title, subtitle and at most2 short bullets. Use exactly ONE of image, visual, table, columns, metrics, steps or quote on a slide. A visual/image/table slide allows at most two short bullets. Never combine metrics with a chart on the same slide; put those values in the chart and details in notes. Other structured layouts should put supporting material in subtitle or notes, not extra bullets. Ordinary slides accept existing bullets/table/image fields. Keep citations in notes. When source values are synthetic, sample or hypothetical, visibly label the chart title or slide caption as synthetic/sample/hypothetical, not only speaker notes. Do not describe illustrative values as achieved production results or measured benchmarks. Honor the requested total slide count including the cover; never pad a deck with filler.
 Images: PDF/Word support {"type":"image","assetId":"img-ID from supplied catalog","caption":"Screenshot of the actual output","widthPercent":100}. PowerPoint slides may have "image":{"assetId":"img-ID","caption":"Caption"}, with at most two short bullets, or an image-only slide. Slide image captions must be <=240 characters; put longer descriptions in notes or another slide. A file can mix multiple uploaded images with multiple generated diagrams/charts. In PDF/Word use separate image/visual blocks in reading order, beside the relevant explanation, with captions; multiple blocks may share a page when they fit. In PowerPoint distribute them across slides, one main image or visual per slide. Match exact assetIds to image reading notes and user descriptions, not filenames alone. Use uploaded images when requested or relevant, never synthesize screenshot results. Do not put image bytes or URLs in recipes.\nExcel: {"kind":"xlsx","title":"Workbook title","sheets":[{"name":"Data","headers":["Item","Quantity","Price"],"rows":[["Example",2,12.5]]}]}. Up to 10 uniquely named sheets, 26 columns and 1000 data rows per sheet, within the overall size limit. Cells accept text, numbers, booleans and null. Keep numeric values numeric and identifiers as text. Headers occupy row 1; use rows:[] for an empty template instead of inventing records. This version exports values, not formulas, charts or merged cells; do not claim a workbook has formulas. Include source URLs in a Sources sheet or source column for researched data. Never invent records or measured values.
 PowerPoint: {"kind":"pptx","title":"Deck title","slides":[{"title":"Slide title","bullets":["Concise point"],"notes":"Detailed speaker notes"}]}. Maximum 40 slides, 6 bullets per slide, 240 characters per bullet; split long content across slides. A slide may instead have "table":{"headers":["Topic","Result"],"rows":[["A","12"]]}, at most 8 columns and 10 rows; table slides allow up to 2 bullets. Use fewer rows/columns for long cells; overflow tables paginate onto extra slides.
-Formatting: paragraph/heading text, bullet items and table cells may be plain strings OR arrays of styled runs such as [{"text":"Important","bold":true,"underline":true,"color":"2457A6"},{"text":" explanation"}]. Only bold, italic, underline and six-digit hex color are supported. Use restrained colors, selective underlining, headings and useful tables appropriate to the request, not decoration everywhere. Document titles and slide titles remain plain strings.
+Formatting: paragraph/heading text, bullet items and table cells may be plain strings OR arrays of styled runs such as [{"text":"Important","bold":true,"underline":true,"color":"2457A6"},{"text":" explanation"}]. Bold, italic, underline and six-digit hex color are supported; DOCX runs additionally support font family names and size in points. Use restrained colors, selective underlining, headings and useful tables appropriate to the request, not decoration everywhere. Document titles and slide titles remain plain strings.
 Code in PDF/Word MUST use {"type":"code","language":"cpp","text":"source code with escaped newline characters"}. Preserve every source line, indentation, blank line, quote and backslash; never collapse code into a prose paragraph. Use level 1 for main headings and level 2 for subsections. Before the tool say "I’ll prepare the document" rather than "I created it". Do not announce completion yourself: Orbit displays confirmation only after the file is generated successfully.
 Length: match the requested depth. A substantial report or study guide can contain 16–19 pages of developed content, examples and tables when useful, not just an outline. Do not shorten a requested long document to a one-page summary. PDF/Word tables accept up to 26 columns; wide tables split into readable panels with the first column repeated. Prefer observations as rows and variables as columns. For PDF/Word, let developed paragraphs and sections flow continuously across pages. Page count means substantive content, not one short section per forced page. Reserve pageBreak for an explicitly requested separate cover or appendix, never to inflate length. A long research-style report usually needs roughly 450–550 words per text page, with explained figures mixed into that flow. Final page count varies with layout; do not guarantee an exact count. Avoid empty pages, repeated filler and padding. For presentations honor the requested slide count and put detailed explanation in notes. Keep only the chat introduction short, not the file content. Complete every JSON object and fence. Maximum 480000 characters per tool.
 Charts: supported types are bar, line, area, pie, doughnut, scatter, curve, box, gantt, horizontal-bar, stacked-bar, percent-bar, stacked-area, step, histogram, heatmap, bubble, waterfall, radar, funnel, treemap. Choose by the relationship in the data, not decoration. Each example below is a complete valid schema. Do not mix their data formats.
@@ -424,7 +484,7 @@ Use only enabled kinds. If a requested kind is absent from Enabled kinds, explai
     if(docs||slides){kinds.add('diagram');kinds.add('chart');}
     return instruction({allowTextFiles,allowNotebooks}).split('\n').filter(line=>{
       if(/^(Diagrams:|Diagram schema:|Diagram layout:)/.test(line))return kinds.has('diagram');
-      if(/^(PDF\/Word:|Document design:|Code in PDF\/Word|Worked solutions:)/.test(line))return docs;
+      if(/^(PDF\/Word:|Document design:|Word formatting:|Code in PDF\/Word|Worked solutions:)/.test(line))return docs;
       if(/^(PowerPoint:|Presentation design:)/.test(line))return slides;
       if(/^Excel:/.test(line))return kinds.has('xlsx');
       if(/^(Embedded visuals:|Images:|Mathematics in files:)/.test(line))return docs||slides;
@@ -576,6 +636,7 @@ Use only enabled kinds. If a requested kind is absent from Enabled kinds, explai
     let marker = "\u0000orbit-widget:";
     while (String(value).includes(marker)) marker += ":";
     const reject = (raw, error, kind) => {
+      kind=canonicalKind(kind);
       if(kind==='text' && !options.allowTextFiles)return '';
       if(['ipynb','notebook'].includes(kind)&&!options.allowNotebooks)return '';
       recognized = true; errors.push(error);
@@ -591,8 +652,8 @@ Use only enabled kinds. If a requested kind is absent from Enabled kinds, explai
         return `${marker}${slots.length - 1}\u0000`;
       }
       recognized = true;
-      if (raw?.kind === 'diagram' ? artifacts.filter(s=>s.kind==='diagram').length>=32 : artifacts.filter(s=>s.kind!=='diagram').length>=4) throw new Error(raw?.kind==='diagram'?'Use at most 32 diagrams per reply. Continue the remaining steps in a follow-up.':'Only four file/chart widgets can be created per reply.');
       const spec = normalize(raw);
+      if (spec.kind === 'diagram' ? artifacts.filter(s=>s.kind==='diagram').length>=32 : artifacts.filter(s=>s.kind!=='diagram').length>=4) throw new Error(spec.kind==='diagram'?'Use at most 32 diagrams per reply. Continue the remaining steps in a follow-up.':'Only four file/chart widgets can be created per reply.');
       if (!settings()[spec.kind]) throw new Error(`${spec.kind.toUpperCase()} is disabled in Widgets.`);
       artifacts.push(spec);
       slots.push({spec});
@@ -1101,9 +1162,10 @@ Use only enabled kinds. If a requested kind is absent from Enabled kinds, explai
   function engine() {
     if(root.OrbitWidgetEngine) return Promise.resolve(root.OrbitWidgetEngine);
     if(!enginePromise) enginePromise=new Promise((resolve,reject)=> {
-      const script=document.createElement('script'); script.src='./vendor/widgets/engine.js?v=26';
-      script.onload=()=>resolve(root.OrbitWidgetEngine);
-      script.onerror=()=>{ enginePromise=null; script.remove(); reject(new Error('Document tools could not load. Update Orbit with the bundled vendor/widgets folder, then retry.')); };
+      const script=document.createElement('script'); script.src=engineUrl;
+      const failed=()=>{enginePromise=null;script.remove();reject(new Error('Document tools could not load. Update Orbit with the bundled vendor/widgets folder, then retry.'));};
+      script.onload=()=>root.OrbitWidgetEngine?.generate&&root.OrbitWidgetEngine?.rasterizeSvg?resolve(root.OrbitWidgetEngine):failed();
+      script.onerror=failed;
       document.head.appendChild(script);
     });
     return enginePromise;
@@ -1127,7 +1189,7 @@ Use only enabled kinds. If a requested kind is absent from Enabled kinds, explai
     if(charts?.types.includes(spec.chartType))return charts.variants(spec);
     return spec.chartType==='box'?['box']:spec.x?['scatter','curve']:['bar','horizontal-bar','stacked-bar','percent-bar','line','step','area','stacked-area','pie','doughnut','waterfall','radar','funnel'];
   }
-  const api = {isSourceFilename,requestedNotebookFile,requestedZip,requestedTextFile,sourceCodeBlock,presentationThemes,visualSvg,resolveVisuals,prepareVisuals,diagramSvg, boxStats, normalize, extract, streamingText, streamingStatus, preparingLabel, activityLabel, fileIntroduction, settings, setEnabled, instruction, instructionFor, chartSvg, chartData, chartVariants, filename, generate, engine, MIME:{...MIME,ipynb:'application/x-ipynb+json',zip:'application/zip'}, escape};
+  const api = {canonicalKind,capabilityInstruction,isSourceFilename,requestedNotebookFile,requestedZip,requestedTextFile,sourceCodeBlock,presentationThemes,visualSvg,resolveVisuals,prepareVisuals,diagramSvg, boxStats, normalize, extract, streamingText, streamingStatus, preparingLabel, activityLabel, fileIntroduction, settings, setEnabled, instruction, instructionFor, chartSvg, chartData, chartVariants, filename, generate, engine, MIME:{...MIME,ipynb:'application/x-ipynb+json',zip:'application/zip'}, escape};
   root.OrbitWidgets=api;
   if(typeof module!=='undefined') module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

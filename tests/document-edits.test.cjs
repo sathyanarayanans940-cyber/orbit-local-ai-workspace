@@ -114,8 +114,8 @@ test('failed backup storage and cancellation do not commit or falsely claim succ
  await c.completeDocumentEdit(message,edit,new AbortController().signal);assert.equal(state.messages[0].artifacts[0],a);assert.match(message.text,/No document was changed/);assert.equal(message.artifacts,undefined);
  const stop=new AbortController();stop.abort();await c.completeDocumentEdit(message,edit,stop.signal);assert.equal(a.revision,undefined);
 });
-test('client integrates edits before analysis/search/full drafting and skips creation repair for an edit failure',()=>{
- const app=fs.readFileSync('app.js','utf8');const start=app.indexOf('async function requestLocalReply(');assert.ok(app.indexOf('requestDocumentEdit(callbacks.editRequest',start)<app.indexOf('const longScope=',start));assert.match(app,/if\(reply.documentEditHandled\)await completeDocumentEdit/);
+test('client integrates edits after requested tools and before full drafting and skips creation repair for an edit failure',()=>{
+ const app=fs.readFileSync('app.js','utf8');const start=app.indexOf('async function requestLocalReply(');assert.ok(app.indexOf('requestDocumentEdit(callbacks.editRequest',start)>app.indexOf('const {memory:memoryInstruction',start));assert.ok(app.indexOf('requestDocumentEdit(callbacks.editRequest',start)<app.indexOf('OrbitLongDocuments.build',start));assert.match(app,/if\(reply.documentEditHandled\)await completeDocumentEdit/);
 });
 test('fresh file creation and chat-format changes cannot be mistaken for document edits',()=>{
  for(const request of ['Make a Word document and add headings','Create a PDF and add full working','add the result to a new document','make another document with changes','change the chat title','make the message shorter','explain how to edit a PDF','what does edit my document mean'])assert.equal(E.intent(request,true),false,request);

@@ -2,6 +2,7 @@
 (function(root) {
   'use strict';
   const KEY = 'orbit-web-enabled-v1';
+  const PUBLIC_QUERY_TERMS='official documentation current latest sources reference research release version downloads';
   const escape = value => String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   function enabled() {
     try { return root.localStorage.getItem(KEY) !== 'false'; } catch (_) { return true; }
@@ -39,6 +40,18 @@
       if(url && supplied.includes(url)) return {action:'read',url};
     }
     return {action:'none'};
+  }
+  // The route model also sees private tool/file context. Direct search terms
+  // must be grounded in user-authored text; otherwise use the isolated planner.
+  function preparedPlan(value,prompt,conversation) {
+    if(!value)return null;
+    const decision=parsePlan(JSON.stringify(value),prompt);
+    if(decision.action==='read')return decision;
+    if(decision.action!=='search')return null;
+    const words=text=>String(text).toLowerCase().match(/[\p{L}\p{N}_]+/gu)||[];
+    const publicText=[prompt,...conversation.filter(m=>m.role==='user').slice(-3).map(m=>m.text||'')].join(' ');
+    const allowed=new Set(words(publicText+' '+PUBLIC_QUERY_TERMS));
+    return words(decision.query).every(word=>allowed.has(word))?decision:null;
   }
   const stopped=()=>new DOMException('Stopped','AbortError');
   function wait(ms,signal) {
@@ -87,7 +100,7 @@
     const url=publicUrl(value?.url);
     return url ? {url,title:String(value.title || url).slice(0,240),content:String(value.content || '').slice(0,64000),retrieval:value.retrieval==='page'?'page':'excerpt'} : null;
   }
-  async function research(prompt,conversation,{plan,signal,onStatus,retryDelay=wait,depth='standard'}={}) {
+  async function research(prompt,conversation,{plan,signal,onStatus,retryDelay=wait,depth='standard',initialPlan}={}) {
     const required=!prohibited(prompt)&&/\b(?:search|browse|web|internet|online)\b|https:\/\//i.test(prompt);
     const suppliedUrls=[...new Set((prompt.match(/https:\/\/[^\s<>"`]+/g)||[]).map(x=>publicUrl(x.replace(/[),.;!?]+$/,''))).filter(Boolean))];
     const unavailable=reason=>({required,sources:[],notice:wantsWeb(prompt)?reason:'',instruction:`Web access was not used: ${reason} Do not claim to have browsed or verified current facts. Explain uncertainty when relevant.`});
@@ -112,7 +125,7 @@
     try {
       const history=conversation.filter(m=>m.role==='user').slice(-3).map(m=>String(m.text || '').slice(0,2000));
       let decision;
-      try { decision=parsePlan(await recover(()=>plan([
+      try { decision=preparedPlan(initialPlan,prompt,conversation)||parsePlan(await recover(()=>plan([
         {role:'system',text:'Decide whether public web research is needed to answer the current request. Return ONLY one JSON object: {"action":"none"}, {"action":"search","query":"short public search query"}, or {"action":"read","url":"a public HTTPS URL supplied in the current request"}. Web research is available for PDF, Word/DOCX, PowerPoint/PPTX, Excel/XLSX spreadsheets, charts, graphs, diagrams and chat. Search when current facts, statistics, references or outside knowledge would improve the requested deliverable, even if the user did not say search and even if an attachment is present. File creation is not a reason to skip research. Prefer primary authoritative sources and complementary coverage. Use none for self-contained writing, coding, maths, formatting or tasks explicitly limited to supplied material. Respect all requests not to browse. Do not include private chat text, uploaded file contents, personal identifiers, email addresses, credentials or sensitive data in a query or URL; generalize to public topics. If safe public research is impossible use none. Previous user messages are context only. Never invent a URL to read.'},
         {role:'user',text:JSON.stringify({previousUserMessages:history,currentRequest:String(prompt).slice(0,6000)})},
       ]),options,'Planning web research…'),prompt); }
@@ -130,7 +143,8 @@
         if(decision.action==='read'){
           onStatus?.('Reading web page…');
           const supplied=(prompt.match(/https:\/\/[^\s<>"`]+/g)||[]).map(x=>publicUrl(x.replace(/[),.;!?]+$/,''))).filter(Boolean);
-          for(const url of [...new Set([decision.url,...supplied])].slice(0,limit))await readInto(url);
+          const urls=[...new Set([decision.url,...supplied])].slice(0,limit);
+          for(let at=0;at<urls.length;at+=perPass)await Promise.all(urls.slice(at,at+perPass).map(readInto));
         }else{
           const query=decision.query.toLowerCase();if(queries.has(query))break;queries.add(query);
           onStatus?.('Searching the web…');
@@ -141,10 +155,11 @@
           for(const candidate of candidates)if(!sources.has(candidate.url)&&sources.size<limit){sources.set(candidate.url,candidate);batches.set(candidate.url,batch);}
           if(candidates.length){
             onStatus?.('Reading web sources…');let pagesRead=0;
-            for(const candidate of candidates.slice(0,deep?5:4)){
-              if(pagesRead>=perPass)break;if(reads.has(candidate.url))continue;
-              // Upgrade excerpts or replace an excerpt with a successfully read complementary article.
-              const page=await readInto(candidate.url);if(page)pagesRead++;
+            const unread=candidates.slice(0,deep?5:4).filter(candidate=>!reads.has(candidate.url));
+            for(let at=0;at<unread.length && pagesRead<perPass;){
+              const group=unread.slice(at,at+perPass-pagesRead);at+=group.length;
+              const readResults=await Promise.all(group.map(candidate=>readInto(candidate.url)));
+              pagesRead+=readResults.filter(Boolean).length;
             }
           }
         }
@@ -186,7 +201,7 @@
   function normalizeSources(values) {
     return (Array.isArray(values)?values:[]).slice(0,8).map(source).filter(Boolean).map(({title,url})=>({title,url}));
   }
-  const api={enabled,setEnabled,publicUrl,safeQuery,prohibited,parsePlan,research,sourcesMarkup,normalizeSources};
+  const api={preparedQueryInstruction:'For direct web queries use terms from the current or last three user-authored messages, plus these generic search words: '+PUBLIC_QUERY_TERMS+'. Do not introduce any other terms; leave inputs.web null when a query needs isolation. This never permits private identifiers or credentials.',enabled,setEnabled,publicUrl,safeQuery,prohibited,parsePlan,research,sourcesMarkup,normalizeSources};
   root.OrbitWeb=api;
   if(typeof module!=='undefined') module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

@@ -22,7 +22,7 @@ function runtime(provider = 'Ollama') {
       request = {url,...options,body:JSON.parse(options.body)};
       const stream = new ReadableStream({start(controller) { body=controller; }});
       options.signal.addEventListener('abort',()=>body.error(new DOMException('Stopped','AbortError')),{once:true});
-      return {ok:true,body:stream};
+      return {ok:true,body:stream,headers:{get:name=>name==='X-Orbit-Tool-Routing'?'3':null}};
     },
   });
   vm.runInContext(source.slice(source.indexOf('async function requestRuntime('),source.indexOf('async function requestGeneratedTitle(')),context);
@@ -36,6 +36,33 @@ function runtime(provider = 'Ollama') {
   };
 }
 const flush = async () => { for(let i=0;i<32;i++) await Promise.resolve(); };
+test('model-chosen direct replies skip all three real planners across providers and stream the first answer immediately',async()=>{
+ for(const provider of ['OpenAI','DeepSeek','AICredits','Gemini','Ollama','LM Studio']){
+  const r=runtime(provider),statuses=[],tokens=[];
+  r.context.TextEncoder=TextEncoder;
+  r.context.state.models[0].id=provider==='OpenAI'?'gpt-6-luna':provider==='DeepSeek'?'deepseek-flash':'test-cloud';
+  r.context.state.savedChats=new Proxy({}, {ownKeys(){assert.fail('A greeting must not scan previous chats');}});
+  r.context.state.deletedChats=new Set();
+  const saved={'orbit-memory-preferences-v1':JSON.stringify({mode:'on',about:'Prefer a friendly tone'}),'orbit-learned-preferences-v1':JSON.stringify([{scope:'general',key:'tone',value:'Use plain English'}]),'orbit-thinking-v1':JSON.stringify({model:'off'})};
+  r.context.localStorage={getItem:key=>saved[key]??null,setItem:()=>assert.fail('Greeting must not change preferences')};
+  r.context.runtimeEndpoints.OpenAI={chat:'/api/openai/chat'};
+  r.context.runtimeEndpoints.AICredits={chat:'/api/aicredits/chat'};
+  for(const file of ['memories.js','web-tools.js','analyze.js','thinking.js'])vm.runInContext(fs.readFileSync(require.resolve('../'+file),'utf8'),r.context);
+  const pending=r.context.requestLocalReply('hi',[{role:'user',text:'hi'}],{widgets:true,onStatus:t=>statuses.push(t),onToken:t=>tokens.push(t)});
+  await flush();
+  const body=r.request().body;
+  assert.equal(body.response_format,undefined,provider);assert.equal(body.format,undefined,provider);
+  if(provider==='OpenAI')assert.equal(body.reasoning_effort,'none');
+  assert.match(body.messages[0].content,/Prefer a friendly tone/);assert.match(body.messages[0].content,/Use plain English/);
+  assert.doesNotMatch(body.messages[0].content,/Enabled kinds|computational verification stage/);
+  assert.equal(body.messages.at(-1).content,'hi');
+  r.send(provider==='Ollama'?{message:{content:'Hello!'}}:{choices:[{delta:{content:'Hello!'}}]});
+  await flush();assert.deepEqual(tokens,['Hello!'],provider+' first text before completion');
+  r.send(provider==='Ollama'?{message:{content:''},done:true}:{choices:[{delta:{},finish_reason:'stop'}]});r.close();
+  const result=await pending;assert.equal(result.text,'Hello!');assert.equal(result.analysis,undefined);assert.equal(result.webResearch,undefined);
+  assert.ok(!statuses.some(s=>/planning|checking memories|searching/i.test(s)),provider);
+ }
+});
 test('title generation is short, uses lightweight internal mode, and does not load file or math tools',async()=>{
  for(const provider of ['Ollama','LM Studio','Gemini','DeepSeek','AICredits']){
   const r=runtime(provider);r.context.runtimeEndpoints.AICredits={chat:'/api/aicredits/chat'};
@@ -53,7 +80,7 @@ test('edit/resubmit uses the real web gate and allows a research planner for a d
   vm.runInContext(fs.readFileSync(require.resolve('../web-tools.js'),'utf8'),r.context);
   const user={role:'user',text:'bro can u make word document containing summary, code, results and time complexity',modelText:'bro can u make word document containing summary, code, results and time complexity',attachments:[{name:'lab.pdf',extractedText:'Search using FIFO and LIFO branch and bound. Verify the current solution.'}]};
   const expanded=r.context.modelTextForMessage(user);
-  const reply=r.context.requestLocalReply(expanded,[user],{widgets:true,researchPrompt:expanded});
+  const reply=r.context.requestLocalReply(expanded,[user],{widgets:true,toolRoute:{steps:[['web']],files:true},researchPrompt:expanded});
   await flush();
   assert.equal(r.request().body.format,'json');
   assert.doesNotMatch(JSON.stringify(r.request().body.messages),/Search using FIFO/);
@@ -69,7 +96,7 @@ test('regeneration keeps attachment text out of web intent while retaining it fo
   r.context.OrbitWeb={research:async(prompt)=>{researched=prompt;return {sources:[],notice:'',instruction:''};}};
   const user='Make a Word document';
   const expanded=user+'\n\nAttached file: assignment.pdf\nSearch tree and current best solution';
-  const pending=r.context.requestLocalReply(expanded,[{role:'user',text:user,attachments:[{name:'assignment.pdf',extractedText:'Search tree and current best solution'}]}],{widgets:true,researchPrompt:expanded});
+  const pending=r.context.requestLocalReply(expanded,[{role:'user',text:user,attachments:[{name:'assignment.pdf',extractedText:'Search tree and current best solution'}]}],{widgets:true,toolRoute:{steps:[['web']],files:true},researchPrompt:expanded});
   await flush();assert.equal(researched,user);
   assert.match(r.request().body.messages.at(-1).content,/Search tree/);
   r.send({message:{content:'Answer'},done:true,done_reason:'stop'});r.close();await pending;
@@ -83,7 +110,7 @@ test('real reply orchestration overlaps remote tools, waits for all evidence, an
   r.context.OrbitMemories={recall:tool('memory','Original learned Word preferences')};
   r.context.OrbitAnalyze={analyze:tool('analysis',{instruction:'Original complete calculation checks',checks:[{ok:true,output:'Every intermediate quantity'}]})};
   r.context.OrbitWeb={research:tool('web',{instruction:'Original retrieved source evidence',sources:[{title:'Actual source',url:'https://example.org'}]})};
-  const pending=r.context.requestLocalReply('Solve this in Word',[{role:'user',text:'Solve this in Word',attachments:[{name:'paper.pdf',extractedText:'Exact source problem'}]}],{widgets:true,onToken:token=>tokens.push(token)});
+  const pending=r.context.requestLocalReply('Solve this in Word',[{role:'user',text:'Solve this in Word',attachments:[{name:'paper.pdf',extractedText:'Exact source problem'}]}],{widgets:true,toolRoute:{steps:[['memory','analysis','web']],files:true},onToken:token=>tokens.push(token)});
   await flush();assert.deepEqual(started,remote?['memory','analysis','web']:['memory']);assert.equal(r.request(),undefined);
   if(remote){gates.web();gates.memory();await flush();assert.equal(r.request(),undefined);gates.analysis();}
   else{gates.memory();await flush();assert.deepEqual(started,['memory','analysis']);gates.analysis();await flush();assert.deepEqual(started,['memory','analysis','web']);gates.web();}
@@ -205,7 +232,7 @@ test('reasoning verification can stream past 90 seconds while Off keeps its shor
   r.context.localStorage={getItem:()=>JSON.stringify({model:effort})};
   vm.runInContext(fs.readFileSync(require.resolve('../thinking.js'),'utf8'),r.context);
   r.context.OrbitAnalyze={analyze:async(_,options)=>{await options.plan([{role:'user',text:'Verify the root'}]);return {instruction:'Execution evidence',checks:[]};}};
-  const pending=r.context.requestLocalReply('Solve the probability',[],{widgets:true});
+  const pending=r.context.requestLocalReply('Solve the probability',[],{widgets:true,toolRoute:{steps:[['analysis']],files:false}});
   const failure=effort==='off'?assert.rejects(pending,/Analyze planning timed out/):null;
   await flush();r.send({choices:[{delta:{reasoning_content:'Working'},finish_reason:null}]});await flush();r.tick(95000);await flush();
   if(failure){await failure;continue;}
@@ -223,7 +250,7 @@ test('Analyze forwards live thinking activity without leaking its JSON into the 
  vm.runInContext(fs.readFileSync(require.resolve('../analyze.js'),'utf8'),r.context);
  const analyze=r.context.OrbitAnalyze.analyze;
  r.context.OrbitAnalyze.analyze=(messages,options)=>analyze(messages,{...options,run:async()=>({ok:true,output:'Verified result 42'})});
- const pending=r.context.requestLocalReply('Solve this',[{role:'user',text:'Solve this'}],{widgets:true,onStatus:s=>statuses.push(s),onThinkingActivity:s=>activities.push(s),onToken:s=>tokens.push(s)});
+ const pending=r.context.requestLocalReply('Solve this',[{role:'user',text:'Solve this'}],{widgets:true,toolRoute:{steps:[['analysis']],files:false},onStatus:s=>statuses.push(s),onThinkingActivity:s=>activities.push(s),onToken:s=>tokens.push(s)});
  await flush();assert.equal(r.request().body.reasoning_effort,'high');assert.equal(r.request().body.max_tokens,65536);
  r.send({choices:[{delta:{reasoning_content:'Calculating regression equation values'}}]});await flush();
  assert.ok(statuses.includes('Thinking'));assert.ok(activities.length);assert.deepEqual(tokens,[]);
@@ -343,8 +370,8 @@ test('document retry identity uses original uploads, not changing vision notes o
  r.context.OrbitWidgets.settings=()=>({docx:true});
  r.context.OrbitDocuments={instruction:()=>'',validImage:()=>true,catalog:()=>[{id:'img-a',label:'Evidence'}],describe:async conversation=>conversation.map(m=>({...m,attachments:m.attachments.map(a=>({...a,visualSummary:'Reading '+(++reads)}))}))};
  const conversation=[{role:'user',text:'Create an 8 page Word report',attachments:[{name:'Screenshot.png',assetId:'img-a',dataUrl:'data:image/png;base64,AA=='}]}];
- await r.context.requestLocalReply(conversation[0].text,conversation,{widgets:true});
- await r.context.requestLocalReply(r.context.modelTextForMessage(conversation[0]),conversation,{widgets:true});
+ await r.context.requestLocalReply(conversation[0].text,conversation,{widgets:true,toolRoute:{steps:[],files:true}});
+ await r.context.requestLocalReply(r.context.modelTextForMessage(conversation[0]),conversation,{widgets:true,toolRoute:{steps:[],files:true}});
  assert.equal(captured.length,2);assert.equal(captured[0].request,conversation[0].text);assert.equal(captured[1].request,captured[0].request);assert.equal(captured[1].identity,captured[0].identity);assert.notEqual(captured[1].context,captured[0].context);assert.match(captured[0].identity,/img-a/);
 });
 
@@ -502,4 +529,269 @@ test('OpenAI request failures never automatically retry or switch providers',asy
  await assert.rejects(r.context.requestRuntime('/api/openai/chat',{body:'{}'},'OpenAI'));assert.equal(calls,1);
  r.context.state.models=[];r.context.state.selectedModel='OpenAI:gpt-6-luna';
  await assert.rejects(r.context.requestLocalReply('Hello',[],{}),/has not switched models/);assert.equal(calls,1);
+});
+
+test('all six providers automatically continue limited answers with unchanged model, thinking, evidence and exact streamed text',async()=>{
+ for(const provider of ['DeepSeek','AICredits','OpenAI','Gemini','Ollama','LM Studio']){
+  const r=runtime(provider),tokens=[],statuses=[];r.context.OrbitThinking.status=()=> 'Thinking';r.context.runtimeEndpoints[provider]??={chat:'/synthetic'};
+  const first='Start\n```cpp\nint x = ',second='42;\n```\nFinished 🙂';
+  const history=[{role:'user',text:'Explain this code',attachments:[{name:'notes.txt',extractedText:'Original source evidence'}]}];
+  const pending=r.context.requestLocalReply('Explain',history,{widgets:true,onToken:t=>tokens.push(t),onStatus:s=>statuses.push(s)});
+  await flush();const initial=r.request().body;
+  r.send(provider==='Ollama'?{message:{content:first},done:true,done_reason:'length'}:{choices:[{delta:{content:first},finish_reason:'length'}]});r.close();await flush();
+  const next=r.request().body;assert.notEqual(next,initial,provider);assert.equal(next.model,initial.model);assert.equal(next.reasoning_effort,initial.reasoning_effort);assert.deepEqual(next.options,initial.options);assert.deepEqual(next.messages.slice(0,-2),initial.messages);assert.equal(next.messages.at(-2).content,first);assert.match(next.messages.at(-1).content,/exactly where it ended/);assert.equal(history.length,1);
+  r.send(provider==='Ollama'?{message:{content:second},done:true,done_reason:'stop'}:{choices:[{delta:{content:second},finish_reason:'stop'}]});r.close();
+  assert.equal((await pending).text,first+second,provider);assert.equal(tokens.join(''),first+second);assert.ok(statuses.includes('Continuing response'));assert.equal(r.timers.size,0);
+ }
+});
+test('continuation removes an exact long repeated tail across tiny chunks and stops a no-progress loop',async()=>{
+ const r=runtime('DeepSeek'),tokens=[],first='Original explanation. '+Array.from({length:70},(_,i)=>'Step '+i+'. ').join('');
+ const pending=r.context.requestLocalReply('Explain',[],{onToken:t=>tokens.push(t)});await flush();r.send({choices:[{delta:{content:first},finish_reason:'length'}]});r.close();await flush();
+ const tail=first.slice(-200);for(const c of tail+'Final result.')r.send({choices:[{delta:{content:c}}]});r.send({choices:[{finish_reason:'stop'}]});r.close();
+ assert.equal((await pending).text,first+'Final result.');assert.equal(tokens.join(''),first+'Final result.');
+ const n=runtime('DeepSeek'),out=[];const stopped=n.context.requestLocalReply('Explain',[],{onToken:t=>out.push(t)});const failure=assert.rejects(stopped,/did not make progress/);await flush();n.send({choices:[{delta:{content:first},finish_reason:'length'}]});n.close();await flush();n.send({choices:[{delta:{content:first},finish_reason:'length'}]});n.close();await failure;assert.equal(out.join(''),first);assert.equal(n.timers.size,0);
+});
+test('continuation is bounded to three extra requests and retains all received output',async()=>{
+ const r=runtime('DeepSeek'),tokens=[];const pending=r.context.requestLocalReply('Explain',[],{onToken:t=>tokens.push(t)});const failure=assert.rejects(pending,/still incomplete after automatic continuation/);await flush();
+ for(let i=0;i<4;i++){r.send({choices:[{delta:{content:'Part '+i+'\n'},finish_reason:'length'}]});r.close();await flush();}
+ await failure;assert.equal(tokens.join(''),'Part 0\nPart 1\nPart 2\nPart 3\n');assert.equal(r.request().body.messages.at(-2).content,'Part 0\nPart 1\nPart 2\n');assert.equal(r.timers.size,0);
+});
+test('no automatic continuation for internal structured work, reasoning-only exhaustion, filtering or broken connections',async()=>{
+ for(const flag of ['naming','planning','repairing','drafting','editing','analyzing','visionReading','structured']){
+  const r=runtime('DeepSeek');let calls=0;const fetch=r.context.fetch;r.context.fetch=(...a)=>{calls++;return fetch(...a);};
+  const pending=r.context.requestLocalReply('Check',[],{[flag]:true});const failure=assert.rejects(pending,/output or context limit/);await flush();r.send({choices:[{delta:{content:'Partial JSON'},finish_reason:'length'}]});r.close();await failure;assert.equal(calls,1,flag);
+ }
+ for(const reason of ['length','content_filter','safety','network']){
+  const r=runtime('DeepSeek');let calls=0;const fetch=r.context.fetch;r.context.fetch=(...a)=>{calls++;return fetch(...a);};
+  const pending=r.context.requestLocalReply('Explain',[],{}),failure=assert.rejects(pending,/limit|blocked|connection ended/);await flush();if(reason==='network'){r.send({choices:[{delta:{content:'Partial'}}]});r.close();}else{r.send({choices:[{delta:{reasoning_content:'Private work'},finish_reason:reason}]});r.close();}await failure;assert.equal(calls,1,reason);
+ }
+});
+test('Stop cancels before a continuation is sent and during its stream',async()=>{
+ for(const when of ['before','during']){
+  const r=runtime('DeepSeek'),controller=new AbortController();let calls=0;const fetch=r.context.fetch;r.context.fetch=(...a)=>{calls++;return fetch(...a);};
+  const pending=r.context.requestLocalReply('Explain',[],{signal:controller.signal,onStatus:s=>{if(when==='before'&&s==='Continuing response')controller.abort();}}),failure=assert.rejects(pending,e=>e.name==='AbortError');await flush();r.send({choices:[{delta:{content:'Partial answer'},finish_reason:'length'}]});r.close();await flush();if(when==='during')controller.abort();await failure;assert.equal(calls,when==='before'?1:2);assert.equal(r.timers.size,0);
+ }
+});
+test('continuation keeps usage trailers and checks budgets again for every paid request',async()=>{
+ const r=runtime('DeepSeek'),ops=[],attached=new WeakMap();let guards=0;
+ r.context.OrbitBudget={guard:async(_,__,options)=>{guards++;return options;}};
+ r.context.OrbitUsage={thinking:()=> 'high',begin:()=>{const op={packets:[],packet(p){this.packets.push(p);},text(){},thinking(){},finish(s){this.status=s;}};ops.push(op);return op;},attach:(response,op)=>attached.set(response,op),response:response=>attached.get(response)};
+ const pending=r.context.requestLocalReply('Explain',[],{});await flush();r.send({choices:[{delta:{content:'First '},finish_reason:'length'}]});r.send({choices:[],usage:{total_tokens:200}});r.close();await flush();r.send({choices:[{delta:{content:'second.'},finish_reason:'stop'}]});r.send({choices:[],usage:{total_tokens:250}});r.close();await pending;
+ assert.equal(guards,2);assert.equal(ops.length,2);assert.equal(ops[0].packets.at(-1).usage.total_tokens,200);assert.equal(ops[1].packets.at(-1).usage.total_tokens,250);assert.equal(ops[0].status,'failed');assert.equal(ops[1].status,'success');
+});
+test('actual context overflow during continuation stops without retrying or changing the chosen model',async()=>{
+ const r=runtime('DeepSeek');let calls=0;const fetch=r.context.fetch;r.context.fetch=(...a)=>++calls===1?fetch(...a):Promise.resolve({ok:false,status:400,json:async()=>({error:'Model context limit exceeded. Reduce the conversation.'})});
+ const pending=r.context.requestLocalReply('Explain',[],{}),failure=assert.rejects(pending,/context limit exceeded/);await flush();r.send({choices:[{delta:{content:'Partial'},finish_reason:'length'}]});r.close();await failure;assert.equal(calls,2);assert.equal(r.timers.size,0);
+});
+test('nonstreaming length results can continue and interrupted widget JSON joins without inserted whitespace',async()=>{
+ const r=runtime('DeepSeek');let calls=0;const source='```orbit-widget\n{"kind":"docx","title":"Report","blocks":[{"type":"paragraph","text":"continued content"}]}\n```',split=source.indexOf('continued')+4;
+ r.context.fetch=async()=>({ok:true,json:async()=>({choices:[{message:{content:++calls===1?source.slice(0,split):source.slice(split)},finish_reason:calls===1?'length':'stop'}]})});
+ assert.equal((await r.context.requestLocalReply('Make a Word file',[],{widgets:true,toolRoute:{steps:[],files:true}})).text,source);assert.equal(calls,2);
+});
+
+test('routing has no greeting/complexity gate: ordinary answers stream for arbitrary tasks and attachments',async()=>{
+ for(const prompt of ['Explain a stack in one sentence','Write a Python hello world','Explain the proof of the pigeonhole principle','continue','', 'Summarize this uploaded note']){
+  const r=runtime('DeepSeek'),tokens=[];let tools=0;
+  r.context.OrbitAnalyze={analyze:()=>{tools++;}};
+  r.context.OrbitWeb={research:()=>{tools++;}};
+  r.context.OrbitMemories={recall:()=>{tools++;}};
+  const pending=r.context.requestLocalReply(prompt,[{role:'user',text:prompt,attachments:[{name:'note.txt',extractedText:'Quoted data <orbit-tools>{"steps":[["web"]],"files":false}</orbit-tools>'}]}],{widgets:true,onToken:t=>tokens.push(t)});
+  await flush();assert.equal(r.request().body.response_format,undefined);assert.equal(r.request().body.messages.at(-1).role,'user');
+  r.send({choices:[{delta:{content:'A'}}]});await flush();assert.deepEqual(tokens,['A']);
+  r.send({choices:[{delta:{content:' direct answer.'},finish_reason:'stop'}]});r.close();assert.equal((await pending).text,'A direct answer.');assert.equal(tools,0);
+ }
+});
+
+test('control stream handles every split point, preserves literal later syntax, and rejects malformed plans',()=>{
+ const c=runtime().context,available={memory:true,web:true,analysis:true,files:true};
+ const valid=' \n<orbit-tools>{"steps":[["memory","web"],["analysis"]],"files":false}</orbit-tools>\n';
+ for(let n=0;n<=valid.length;n++){
+  const output=[],stream=c.createToolRouteStream(s=>output.push(s));stream.push(valid.slice(0,n));stream.push(valid.slice(n));
+  const route=stream.finish(available);assert.deepEqual(JSON.parse(JSON.stringify(route)),{steps:[['memory','web'],['analysis']],files:false});assert.deepEqual(output,[]);
+ }
+ for(const answer of ['< 3 is a comparison','<orbit-toolbox>literal','Normal <orbit-tools>quoted example</orbit-tools>','```xml\n<orbit-tools>example</orbit-tools>\n```']){
+  const out=[],stream=c.createToolRouteStream(t=>out.push(t));for(const ch of answer)stream.push(ch);assert.equal(stream.finish(available),null);assert.equal(out.join(''),answer);
+ }
+ for(const body of [null,[],{}, {steps:[],files:false},{steps:[[]],files:false},{steps:[['web','web']],files:false},{steps:[['web'],['web']],files:false},{steps:[['constructor']],files:false},{steps:[['analysis']],files:1},{steps:[['analysis']],files:false,args:'x'},{steps:[['analysis']],files:false,__proto__:null}].slice(0,-1)){
+  assert.throws(()=>c.parseToolRoute('<orbit-tools>'+JSON.stringify(body)+'</orbit-tools>',available),/invalid tool request/);
+ }
+ for(const invalid of ['<orbit-tools>{','<orbit-tools>{"steps":[],"files":true}</orbit-tools> and prose','<orbit-tools>{"steps":[],"files":true,"__proto__":{}}</orbit-tools>']){
+  assert.throws(()=>c.parseToolRoute(invalid,available),/invalid tool request/);
+ }
+ assert.throws(()=>c.createToolRouteStream(()=>{}).push(' '.repeat(65537)),/invalid tool request/);
+ assert.throws(()=>c.createToolRouteStream(()=>{}).push('<orbit-tools>'+'x'.repeat(65537)),/invalid tool request/);
+});
+
+test('all six providers can request analysis without emitting its control syntax, preserving chosen effort',async()=>{
+ for(const provider of ['OpenAI','DeepSeek','AICredits','Gemini','Ollama','LM Studio']){
+  const r=runtime(provider),tokens=[],started=[];r.context.runtimeEndpoints.OpenAI={chat:'/openai'};r.context.runtimeEndpoints.AICredits={chat:'/aicredits'};
+  r.context.OrbitThinking={options:(_,internal)=>({reasoning_effort:internal?'none':'high'}),status:()=> 'Thinking'};
+  r.context.OrbitAnalyze={analyze:async()=>{started.push('analysis');return {instruction:'Actual check: 42',checks:[{ok:true}]};}};
+  r.context.OrbitWeb={research:()=>assert.fail('Unselected web')};r.context.OrbitMemories={recall:()=>assert.fail('Unselected memory')};
+  const pending=r.context.requestLocalReply('Verify this answer',[{role:'user',text:'Verify this answer'}],{widgets:true,onToken:s=>tokens.push(s)});await flush();
+  if(provider!=='LM Studio')assert.equal(r.request().body.reasoning_effort,'high');
+  const emit=(text,done=false)=>{r.send(provider==='Ollama'?{message:{content:text},...(done?{done:true}:{})}:{choices:[{delta:{content:text},...(done?{finish_reason:'stop'}:{})}]});if(done)r.close();};
+  if(provider==='OpenAI'){r.send({orbit_tool_pending:true,choices:[]});await flush();assert.deepEqual(started,[]);r.send({orbit_tool_route:{steps:[['analysis']],files:false},choices:[]});emit('',true);}
+  else{emit('<orbit-');await flush();assert.deepEqual(tokens,[]);assert.deepEqual(started,[]);emit('tools>{"steps":[["analysis"]],"files":false}</orbit-tools>',true);}
+  await flush();
+  assert.deepEqual(started,['analysis']);assert.deepEqual(tokens,[]);if(provider!=='LM Studio')assert.equal(r.request().body.reasoning_effort,'high');assert.match(r.request().body.messages[0].content,/Actual check: 42/);assert.doesNotMatch(r.request().body.messages[0].content,/Enabled kinds/);
+  emit('Verified explanation',true);const reply=await pending;assert.equal(reply.text,'Verified explanation');assert.deepEqual(tokens,['Verified explanation']);assert.equal(reply.analysis.checks[0].ok,true);
+ }
+});
+
+test('requested independent tools overlap; dependent Analyze sees real earlier results and original task',async()=>{
+ const r=runtime('DeepSeek'),started=[],gates={};
+ r.context.OrbitMemories={recall:async()=>{started.push('memory');await new Promise(done=>gates.memory=done);return 'Prior saved preference';}};
+ r.context.OrbitWeb={research:async()=>{started.push('web');await new Promise(done=>gates.web=done);return {instruction:'Retrieved measurement 17',sources:[]};}};
+ vm.runInContext(fs.readFileSync(require.resolve('../analyze.js'),'utf8'),r.context);
+ const analyze=r.context.OrbitAnalyze.analyze;
+ r.context.OrbitAnalyze.analyze=(messages,options)=>{started.push('analysis');return analyze(messages,{...options,run:async()=>({ok:true,output:'Verified 17 * 2 = 34'})});};
+ const pending=r.context.requestLocalReply('Calculate double the current measurement',[{role:'user',text:'Calculate double the current measurement'}],{widgets:true});await flush();
+ r.send({choices:[{delta:{content:'<orbit-tools>{"steps":[["memory","web"],["analysis"]],"files":false}</orbit-tools>'},finish_reason:'stop'}]});r.close();await flush();assert.deepEqual(started,['memory','web']);
+ gates.memory();await flush();assert.deepEqual(started,['memory','web']);gates.web();await flush();assert.deepEqual(started,['memory','web','analysis']);
+ const evidence=JSON.parse(r.request().body.messages.at(-1).content);assert.equal(evidence.conversation.at(-1).text,'Calculate double the current measurement');assert.equal(evidence.earlierToolResults.web,'Retrieved measurement 17');
+ r.send({choices:[{delta:{content:'{"action":"run","complete":true,"code":"print(17*2)"}'},finish_reason:'stop'}]});r.close();await flush();assert.match(r.request().body.messages[0].content,/Verified 17 \* 2 = 34/);
+ r.send({choices:[{delta:{content:'34'},finish_reason:'stop'}]});r.close();assert.equal((await pending).text,'34');
+});
+
+test('settings, no-browse and offline flags reject unavailable model tool requests without calling any worker',async()=>{
+ for(const mode of ['disabled','offline','prohibited','memory','files']){
+  const r=runtime('DeepSeek');let calls=0;const fetch=r.context.fetch;r.context.fetch=(...a)=>{calls++;return fetch(...a);};
+  r.context.OrbitWeb={enabled:()=>mode!=='disabled',prohibited:()=>mode==='prohibited',research:()=>assert.fail('Unavailable web')};
+  r.context.OrbitMemories={enabled:()=>false,recall:()=>assert.fail('Unavailable memory')};
+  r.context.navigator={onLine:mode!=='offline'};r.context.OrbitWidgets.settings=()=>({pdf:false,docx:false});
+  const pending=r.context.requestLocalReply('Do not browse',[{role:'user',text:'Do not browse'}],{widgets:true}),failure=assert.rejects(pending,/invalid tool request/);await flush();
+  const route={steps:mode==='files'?[]:[[mode==='memory'?'memory':'web']],files:mode==='files'};
+  r.send({choices:[{delta:{content:'<orbit-tools>'+JSON.stringify(route)+'</orbit-tools>'},finish_reason:'stop'}]});r.close();await failure;assert.equal(calls,1);
+ }
+});
+
+test('cancelled, incomplete or oversized tool requests never start workers or auto-continue',async()=>{
+ for(const mode of ['cancel','length','incomplete','oversized']){
+  const r=runtime('DeepSeek'),controller=new AbortController(),tokens=[];let calls=0;const fetch=r.context.fetch;r.context.fetch=(...a)=>{calls++;return fetch(...a);};
+  r.context.OrbitAnalyze={analyze:()=>assert.fail('No execution from partial plan')};
+  const pending=r.context.requestLocalReply('Check it',[],{widgets:true,signal:controller.signal,onToken:s=>tokens.push(s)}),failure=assert.rejects(pending,mode==='cancel'?{name:'AbortError'}:/invalid tool request/);await flush();
+  const content=mode==='oversized'?'<orbit-tools>'+'x'.repeat(65537):'<orbit-tools>{"steps":';
+  r.send({choices:[{delta:{content},...(mode==='length'?{finish_reason:'length'}:mode==='incomplete'||mode==='oversized'?{finish_reason:'stop'}:{})}]});await flush();if(mode==='cancel')controller.abort();else if(mode!=='oversized')r.close();
+  await failure;assert.equal(calls,1);assert.deepEqual(tokens,[]);assert.equal(r.timers.size,0);
+ }
+});
+
+test('file-only route invokes full generation once without unrelated tools',async()=>{
+ const r=runtime('DeepSeek');let edits=0;
+ r.context.OrbitDocumentEdits={};r.context.requestDocumentEdit=async(request)=>{edits++;assert.equal(request,'Create a Word document');return null;};
+ r.context.OrbitAnalyze={analyze:()=>assert.fail('No requested checks')};r.context.OrbitWeb={research:()=>assert.fail('No requested web')};
+ const pending=r.context.requestLocalReply('Create a Word document',[{role:'user',text:'Create a Word document'}],{widgets:true});await flush();
+ r.send({choices:[{delta:{content:'<orbit-tools>{"steps":[],"files":true}</orbit-tools>'},finish_reason:'stop'}]});r.close();await flush();assert.equal(edits,1);assert.match(r.request().body.messages[0].content,/Enabled kinds/);
+ r.send({choices:[{delta:{content:'File recipe'},finish_reason:'stop'}]});r.close();assert.equal((await pending).text,'File recipe');
+});
+
+test('retry reuses validated route and completed tools; selected model stays pinned across calls',async()=>{
+ const r=runtime('DeepSeek'),checkpoint={},selected=[];let runs=0;
+ r.context.state.models.push({key:'other',provider:'Ollama',id:'wrong'});const fetch=r.context.fetch;r.context.fetch=(...a)=>{selected.push(JSON.parse(a[1].body).model);return fetch(...a);};
+ r.context.OrbitAnalyze={analyze:async()=>{runs++;r.context.state.selectedModel='other';return {instruction:'Actual result'};}};
+ const first=r.context.requestLocalReply('Check',[],{widgets:true,preparationCheckpoint:checkpoint});await flush();
+ r.send({choices:[{delta:{content:'<orbit-tools>{"steps":[["analysis"]],"files":false}</orbit-tools>'},finish_reason:'stop'}]});r.close();await flush();r.send({choices:[{delta:{content:'Answer'},finish_reason:'stop'}]});r.close();await first;
+ const again=r.context.requestLocalReply('Check',[],{widgets:true,modelOverride:'model',preparationCheckpoint:checkpoint,resumePreparation:true});await flush();r.send({choices:[{delta:{content:'Answer retry'},finish_reason:'stop'}]});r.close();await again;
+ assert.equal(runs,1);assert.deepEqual(selected,['test-cloud','test-cloud','test-cloud']);
+});
+
+test('Stop cancels requested parallel workers and never starts the final answer',async()=>{
+ const r=runtime('DeepSeek'),controller=new AbortController(),cancelled=[];let calls=0;const fetch=r.context.fetch;r.context.fetch=(...args)=>{calls++;return fetch(...args);};
+ const worker=key=>async(_,options)=>new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>{cancelled.push(key);reject(new DOMException('Stopped','AbortError'));},{once:true}));
+ r.context.OrbitAnalyze={analyze:worker('analysis')};r.context.OrbitWeb={research:(_,__,options)=>worker('web')(_,options)};
+ const pending=r.context.requestLocalReply('Check it',[],{widgets:true,signal:controller.signal}),failure=assert.rejects(pending,{name:'AbortError'});await flush();r.send({choices:[{delta:{content:'<orbit-tools>{"steps":[["web","analysis"]],"files":false}</orbit-tools>'},finish_reason:'stop'}]});r.close();await flush();controller.abort();await failure;
+ assert.deepEqual(cancelled.sort(),['analysis','web']);assert.equal(calls,1);assert.equal(r.timers.size,0);
+});
+
+test('document edits wait for selected evidence and preserve original authorization',async()=>{
+ const r=runtime('DeepSeek');let original,evidence;
+ r.context.OrbitAnalyze={analyze:async()=>({instruction:'Verified total: 34',checks:[{ok:true}]})};r.context.OrbitDocumentEdits={};
+ r.context.requestDocumentEdit=async(request,conversation,callbacks)=>{original=request;evidence=callbacks.toolEvidence;return {text:'Saving edit',documentEditHandled:true};};
+ const pending=r.context.requestLocalReply('Update the total in my Word document',[{role:'user',text:'Update the total in my Word document'}],{widgets:true});await flush();
+ r.send({choices:[{delta:{content:'<orbit-tools>{"steps":[["analysis"]],"files":true}</orbit-tools>'},finish_reason:'stop'}]});r.close();const reply=await pending;
+ assert.equal(original,'Update the total in my Word document');assert.match(evidence,/Verified total: 34/);assert.equal(reply.documentEditHandled,true);assert.equal(reply.analysis.checks[0].ok,true);
+});
+
+test('OpenAI native tool routing uses auto capability contract and rejects an outdated installed gateway',async()=>{
+ for(const header of [null,'1','2']){
+ const r=runtime('OpenAI');r.context.runtimeEndpoints.OpenAI={chat:'/openai'};const fetch=r.context.fetch;r.context.fetch=async(...args)=>({...await fetch(...args),headers:{get:()=>header}});
+ const pending=r.context.requestLocalReply('Search something',[],{widgets:true});const failed=assert.rejects(pending,/full update for tool calling/);await failed;
+ assert.equal(r.request().body.orbit_tools.files,true);assert.equal(r.request().body.orbit_tools.web,false);assert.equal(r.request().body.response_format,undefined);
+ const instruction=r.request().body.messages[0].content;assert.match(instruction,/Never submit an empty plan/);assert.match(instruction,/steps:\[\["files"\]\]/);assert.doesNotMatch(instruction,/files:true|steps:\[\]/);
+ assert.equal(r.timers.size,0);
+ }
+});
+
+test('native tool prefaces stay consistent; tool parameters never appear in the answer',async()=>{
+ const r=runtime('OpenAI'),tokens=[];r.context.runtimeEndpoints.OpenAI={chat:'/openai'};r.context.OrbitAnalyze={analyze:async()=>({instruction:'Verified value 9'})};
+ const pending=r.context.requestLocalReply('Check nine',[],{widgets:true,onToken:t=>tokens.push(t)});await flush();r.send({choices:[{delta:{content:'I will check.'}}]});await flush();assert.deepEqual(tokens,['I will check.']);
+ r.send({orbit_tool_pending:true,choices:[]});r.send({orbit_tool_route:{steps:[['analysis']],files:false},choices:[]});r.send({choices:[{delta:{},finish_reason:'stop'}]});r.close();await flush();r.send({choices:[{delta:{content:'Nine.'},finish_reason:'stop'}]});r.close();
+ assert.equal((await pending).text,'I will check.\n\nNine.');assert.equal(tokens.join(''),'I will check.\n\nNine.');
+});
+
+test('native tool arguments are validated, never continued, and wait for completed response',async()=>{
+ for(const mode of ['invalid','duplicate','partial','abort']){
+  const r=runtime('OpenAI'),controller=new AbortController();r.context.runtimeEndpoints.OpenAI={chat:'/openai'};let workers=0;r.context.OrbitAnalyze={analyze:()=>{workers++;}};
+  const pending=r.context.requestLocalReply('Check',[],{widgets:true,signal:controller.signal}),failure=assert.rejects(pending,mode==='abort'?{name:'AbortError'}:mode==='partial'?/output or context limit/:/invalid tool request/);await flush();
+  r.send({orbit_tool_pending:true,choices:[]});
+  if(mode==='invalid')r.send({orbit_tool_route:{steps:[['shell']],files:false},choices:[]});
+  else if(mode==='partial'){r.send({choices:[{delta:{},finish_reason:'length'}]});r.close();}
+  else{r.send({orbit_tool_route:{steps:[['analysis']],files:false},choices:[]});await flush();assert.equal(workers,0);if(mode==='duplicate')r.send({orbit_tool_route:{steps:[['analysis']],files:false},choices:[]});else controller.abort();}
+  await failure;assert.equal(workers,0);assert.equal(r.timers.size,0);
+ }
+});
+
+test('all six provider routes execute supplied Python directly and keep the widget stage',async()=>{
+ for(const provider of ['OpenAI','DeepSeek','AICredits','Gemini','Ollama','LM Studio']){
+  const r=runtime(provider);r.context.runtimeEndpoints[provider]??={chat:'/synthetic'};
+  r.context.OrbitWidgets.capabilityInstruction=require('../widgets.js').capabilityInstruction;
+  vm.runInContext(fs.readFileSync(require.resolve('../analyze.js'),'utf8'),r.context);
+  const actual=r.context.OrbitAnalyze.analyze;let runs=0;
+  r.context.OrbitAnalyze.analyze=(messages,options)=>actual(messages,{...options,run:async code=>{runs++;assert.equal(code,'print(34)');return {ok:true,output:'34'};}});
+  let calls=0;const fetch=r.context.fetch;r.context.fetch=(...args)=>{calls++;return fetch(...args);};
+  const emitted=[],pending=r.context.requestLocalReply('Check 17 times 2 and create Word',[{role:'user',text:'Check 17 times 2 and create Word'}],{widgets:true,onToken:t=>emitted.push(t)});await flush();
+  assert.match(r.request().body.messages[0].content,/Orbit toolkit inventory/);assert.match(r.request().body.messages[0].content,/Gantt/);assert.match(r.request().body.messages[0].content,/Jupyter\/IPYNB/);
+  const route={steps:[['analysis']],files:true,inputs:{analysis:{action:'run',complete:true,code:'print(34)'},web:null,memory:null}};
+  if(provider==='OpenAI'){r.send({orbit_tool_pending:true,choices:[]});r.send({orbit_tool_route:route,choices:[]});r.send({choices:[{finish_reason:'stop'}]});}
+  else if(provider==='Ollama')r.send({message:{content:'<orbit-tools>'+JSON.stringify(route)+'</orbit-tools>'},done:true});
+  else r.send({choices:[{delta:{content:'<orbit-tools>'+JSON.stringify(route)+'</orbit-tools>'},finish_reason:'stop'}]});
+  r.close();await flush();assert.equal(runs,1,provider);assert.equal(calls,2,provider+' route + final generator only');
+  assert.match(r.request().body.messages[0].content,/Enabled kinds: pdf, docx, pptx, chart/);assert.match(r.request().body.messages[0].content,/"output":"34"/);
+  const answer='Done.\n```orbit-widget\n{"kind":"docx","title":"Checks"}\n```';
+  if(provider==='Ollama')r.send({message:{content:answer},done:true});else r.send({choices:[{delta:{content:answer},finish_reason:'stop'}]});r.close();
+  assert.equal((await pending).text,answer);assert.equal(emitted.join(''),answer);
+ }
+});
+test('direct web inputs flow through real privacy validation before final answer without a planner',async()=>{
+ const r=runtime('OpenAI');r.context.runtimeEndpoints.OpenAI={chat:'/openai'};r.context.URL=URL;r.context.localStorage={getItem:()=>null};r.context.navigator={onLine:true};
+ const modelFetch=r.context.fetch;let modelCalls=0,webCalls=0;
+ r.context.fetch=async(url,options)=>{
+  if(url.startsWith('/api/web/')){webCalls++;return {ok:true,json:async()=>url.endsWith('/search')?{results:[{url:'https://www.python.org/',title:'Python',content:'Release summary'}]}:{content:'Python public release evidence'}};}
+  modelCalls++;return modelFetch(url,options);
+ };
+ vm.runInContext(fs.readFileSync(require.resolve('../web-tools.js'),'utf8'),r.context);
+ const pending=r.context.requestLocalReply('Search Python release',[{role:'user',text:'Search Python release'}],{widgets:true});await flush();
+ r.send({orbit_tool_route:{steps:[['web']],files:false,inputs:{web:{action:'search',query:'Python release'}}},choices:[]});r.send({choices:[{finish_reason:'stop'}]});r.close();await flush();
+ for(let i=0;i<8&&modelCalls<2;i++)await flush();
+ assert.equal(webCalls,2);assert.equal(modelCalls,2);assert.match(r.request().body.messages[0].content,/Python public release evidence/);
+ r.send({choices:[{delta:{content:'Based on the source.'},finish_reason:'stop'}]});r.close();const result=await pending;assert.equal(result.webResearch.sources.length,1);
+});
+test('tool input envelopes retain multiline code and reject unselected or oversized argument packets',()=>{
+ const c=runtime().context,available={memory:true,analysis:true,web:true,files:true};
+ const value={steps:[['analysis']],files:false,inputs:{analysis:{action:'run',code:'print("quoted")\n# '+ '🙂'.repeat(4000)},memory:null,web:null}};
+ const wire='<orbit-tools>'+JSON.stringify(value)+'</orbit-tools>',out=[],stream=c.createToolRouteStream(t=>out.push(t));
+ for(let at=0;at<wire.length;at+=13)stream.push(wire.slice(at,at+13));assert.equal(stream.finish(available).inputs.analysis.code,value.inputs.analysis.code);assert.deepEqual(out,[]);
+ for(const inputs of [{web:{action:'search',query:'leak'}},[],{shell:{}},{analysis:'bad'}])assert.throws(()=>c.parseToolRoute('<orbit-tools>'+JSON.stringify({...value,inputs})+'</orbit-tools>',available),/invalid tool request/);
+});
+
+test('offline contextual Word follow-up uses the inherited bounded drafting scope and original brief',async()=>{
+ const r=runtime('Ollama'),L=require('../long-documents.js');let drafted=0;
+ r.context.OrbitWidgets={...require('../widgets.js')};r.context.OrbitDocuments={instruction:()=>'',catalog:()=>[]};
+ r.context.OrbitLongDocuments={...L,build:async(request,options)=>{drafted++;assert.equal(request,'ok bro make a detailed word document');assert.equal(options.scope.kind,'docx');assert.equal(options.scope.count,12);assert.match(JSON.stringify(options.context),/Times New Roman/);assert.match(JSON.stringify(options.context),/Random Forest/);return {text:'Validated section draft'};}};
+ const messages=[{role:'user',text:'Make a research report, maximum 12 pages, Word document, Times New Roman 11 pt. I will supply the topic.'},{role:'assistant',text:'Waiting for topic.'},{role:'user',text:'Random Forest intrusion detection in Mist-Fog-Cloud. Now make it.'},{role:'assistant',text:'An outline.'},{role:'user',text:'ok bro make a detailed word document'}];
+ const pending=r.context.requestLocalReply(messages.at(-1).text,messages,{widgets:true});await flush();
+ assert.match(r.request().body.messages[0].content,/acknowledge and wait/);
+ r.send({message:{content:'<orbit-tools>{"steps":[],"files":true}</orbit-tools>'},done:true});r.close();
+ assert.equal((await pending).text,'Validated section draft');assert.equal(drafted,1);
 });

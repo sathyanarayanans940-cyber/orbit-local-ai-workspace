@@ -4,6 +4,12 @@ Personal software project: a **local AI workspace for LM Studio and Ollama**, wi
 
 **Status:** actively developed prototype. Features and regression tests are included; this portfolio snapshot does not establish production readiness or reliable output from every model. Generated content depends on the selected model.
 
+## Latest update — 8 October 2026
+
+Model-directed tool selection avoids mandatory web/Analyze planning for ordinary replies. Selected independent tool work can run concurrently; document generation retains complete tool schemas and requested detail. This update also includes automatic output-limit continuation, Word formatting controls and reference-style extraction, PowerPoint image handling fixes, and stronger widget recovery and context retention.
+
+Fresh regression coverage includes cancellation, malformed and mixed recipes, output limits, ZIP exports, notebooks, source files and document follow-ups. Models can still fail to provide a valid recipe; recovery is bounded and reports failure rather than fabricating a substitute document.
+
 ## What to inspect
 
 - `app.js`, `chat-store.js`, `memories.js`: conversations, persistence and scoped memory.

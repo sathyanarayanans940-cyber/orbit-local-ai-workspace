@@ -274,4 +274,114 @@ class EndpointTests(EndpointFixture):
         connection.close.assert_called_once()
         for _ in range(3):self.assertTrue(self.gateway.slots.acquire(blocking=False))
 
+
+class RoutingTests(unittest.TestCase):
+    caps = {'memory': True, 'web': True, 'analysis': True, 'files': True}
+    def test_fixed_function_registration_auto_and_strict(self):
+        with tempfile.TemporaryDirectory() as root:
+            payload = oa.OpenAIGateway(root).payload({**RAW, 'orbit_tools': self.caps, 'tools':[{'type':'web_search'}]})
+        self.assertEqual(payload['tool_choice'], 'auto')
+        self.assertFalse(payload['parallel_tool_calls'])
+        self.assertEqual(len(payload['tools']),1)
+        tool=payload['tools'][0]
+        self.assertEqual(tool['name'],'orbit_tools');self.assertTrue(tool['strict'])
+        self.assertFalse(tool['parameters']['additionalProperties'])
+        self.assertEqual(tool['parameters']['required'],['steps','inputs'])
+        self.assertFalse(payload['store'])
+        for bad in [None,[],{}, {**self.caps,'web':1},{**self.caps,'shell':True}]:
+            with self.assertRaises(oa.OpenAIError):oa.routing_capabilities(bad)
+        with tempfile.TemporaryDirectory() as root:
+            g=oa.OpenAIGateway(root)
+            self.assertNotIn('tools',g.payload({**RAW,'orbit_tools':dict.fromkeys(self.caps,False)}))
+            with self.assertRaises(oa.OpenAIError):g.payload({**RAW,'orbit_tools':self.caps,'response_format':{'type':'json_object'}})
+
+    def test_routes_validate_disabled_duplicates_unknown_empty_and_size(self):
+        route={'steps':[['web','memory'],['analysis']],'files':True}
+        self.assertEqual(oa.validate_route(json.dumps({'steps':route['steps']+[['files']]}),self.caps),route)
+        for value in [None,[],{}, {'steps':[]},{'steps':[[]]},{'steps':[['web','web']]},{'steps':[['shell']]},{'steps':[['files'],['web']]},{'steps':[['web','files']]},{'steps':[['files'],['files']]},{'steps':[['analysis']],'files':1},{**route,'extra':1}]:
+            with self.assertRaises(oa.OpenAIError):oa.validate_route(json.dumps(value),self.caps)
+        with self.assertRaises(oa.OpenAIError):oa.validate_route(' '*65537,self.caps)
+        with self.assertRaises(oa.OpenAIError):oa.validate_route(json.dumps({'steps':[['web']]}),{**self.caps,'web':False})
+
+    def test_nonempty_schema_and_only_available_tools_for_every_capability_set(self):
+        from itertools import product
+        for flags in product((False, True), repeat=4):
+            caps=dict(zip(self.caps,flags))
+            if not any(flags):
+                continue
+            steps=oa.route_function(caps)['parameters']['properties']['steps']
+            self.assertEqual(steps['minItems'],1)
+            self.assertEqual(steps['items']['minItems'],1)
+            self.assertEqual(set(steps['items']['items']['enum']),{k for k,v in caps.items() if v})
+            for key,enabled in caps.items():
+                args=json.dumps({'steps':[[key]]})
+                if enabled:
+                    self.assertEqual(oa.validate_route(args,caps),{'steps':[] if key=='files' else [[key]],'files':key=='files'})
+                else:
+                    with self.assertRaises(oa.OpenAIError):oa.validate_route(args,caps)
+        with self.assertRaises(oa.OpenAIError):oa.validate_route('{"steps":[],"files":false}',self.caps)
+
+    def test_direct_tool_inputs_survive_gateway_without_execution_and_reject_unselected(self):
+        inputs={'analysis':{'action':'run','code':'print("hi")\n# '+ 'x'*8000,'complete':True},'web':None,'memory':None}
+        result=oa.validate_route(json.dumps({'steps':[['analysis'],['files']],'inputs':inputs}),self.caps)
+        self.assertEqual(result,{'steps':[['analysis']],'files':True,'inputs':{'analysis':inputs['analysis']}})
+        for bad in [[],{'shell':{}},{'web':{}},{'analysis':'code'}]:
+            with self.assertRaises(oa.OpenAIError):oa.validate_route(json.dumps({'steps':[['analysis']],'inputs':bad}),self.caps)
+        wire=self.tool_events(json.dumps({'steps':[['analysis']],'inputs':inputs}))
+        packets=[];parser=oa.ResponsesStream(self.caps)
+        for at in range(0,len(wire),11):packets.extend(parser.feed(wire[at:at+11]))
+        self.assertEqual(next(p['orbit_tool_route'] for p in packets if 'orbit_tool_route' in p)['inputs']['analysis'],inputs['analysis'])
+        self.assertFalse(any(p.get('choices') and p['choices'][0].get('delta',{}).get('content') for p in packets))
+        schema=oa.route_function(self.caps)['parameters']['properties']['inputs']
+        self.assertEqual(schema['required'],['web','analysis','memory'])
+        for branch in schema['properties'].values():
+            self.assertFalse(branch['anyOf'][0]['additionalProperties'])
+            self.assertIn({'type':'null'},branch['anyOf'])
+
+    def tool_events(self, arguments, terminal='response.completed'):
+        item={'type':'function_call','name':'orbit_tools','id':'fc_test','call_id':'call_test','arguments':arguments,'status':'completed'}
+        return event('response.output_item.added',item={**item,'arguments':'','status':'in_progress'})+event('response.function_call_arguments.delta',delta=arguments)+event('response.function_call_arguments.done',arguments=arguments)+event('response.output_item.done',item=item)+final(terminal,output=[item],incomplete_details={'reason':'max_output_tokens'})
+
+    def test_stream_single_route_only_after_completion_across_every_byte(self):
+        route={'steps':[['web'],['analysis']],'files':False}
+        wire=self.tool_events(json.dumps({'steps':route['steps']}))
+        for size in [1,2,11,65536]:
+            parser=oa.ResponsesStream(self.caps);packets=[]
+            for at in range(0,len(wire),size):packets.extend(parser.feed(wire[at:at+size]))
+            self.assertEqual([p['orbit_tool_route'] for p in packets if 'orbit_tool_route' in p],[route])
+            self.assertEqual(sum(p.get('orbit_tool_pending',False) for p in packets),1)
+            self.assertTrue(parser.finished)
+            self.assertEqual(packets[-1]['choices'][0]['finish_reason'],'stop')
+            self.assertEqual(next(p['usage'] for p in packets if 'usage' in p)['total_tokens'],140)
+            self.assertNotIn('content',json.dumps(packets))
+
+    def test_incomplete_unregistered_unknown_multiple_and_oversized_calls_fail_closed(self):
+        args=json.dumps({'steps':[['web']]})
+        item={'type':'function_call','name':'orbit_tools','arguments':args,'status':'completed'}
+        wires=[self.tool_events(args,'response.incomplete'),self.tool_events('{'),event('response.output_item.added',item={**item,'name':'shell'}),event('response.output_item.added',item=item)*2,final(output=[item,item]),final(output=[{**item,'status':'in_progress'}]),event('response.output_item.added',item=item)+event('response.function_call_arguments.delta',delta='x'*65537)]
+        for wire in wires:
+            packets=[]
+            with self.assertRaises(oa.OpenAIError):
+                for packet in oa.ResponsesStream(self.caps).feed(wire):packets.append(packet)
+            self.assertFalse(any('orbit_tool_route' in p for p in packets))
+        with self.assertRaises(oa.OpenAIError):list(oa.ResponsesStream().feed(self.tool_events(args)))
+
+
+class RoutingEndpointTests(EndpointFixture):
+    def test_native_tool_gateway_dispatch_is_separate_from_answer_and_preserves_usage(self):
+        self.gateway.save(FAKE_KEY)
+        route={'steps':[['web']], 'files':False}
+        item={'type':'function_call','name':'orbit_tools','arguments':json.dumps({'steps':route['steps']}),'status':'completed'}
+        upstream=Mock();upstream.getheader.return_value='text/event-stream'
+        upstream.read1.side_effect=[event('response.output_item.added',item={**item,'arguments':'','status':'in_progress'}),final(output=[item])]
+        connection=Mock()
+        with patch.object(self.gateway,'connect',return_value=(connection,upstream)) as connect:
+            status,body,headers=self.request('POST','/api/openai/chat',{**RAW,'orbit_tools':RoutingTests.caps},include_headers=True)
+        self.assertEqual(status,200);self.assertEqual(headers['X-Orbit-Tool-Routing'],'3')
+        self.assertIn(b'"orbit_tool_route":',body);self.assertIn(b'"total_tokens": 140',body);self.assertIn(b'[DONE]',body)
+        self.assertNotIn(b'"content":',body);self.assertNotIn(FAKE_KEY.encode(),body)
+        self.assertEqual(connect.call_args.args[3]['tools'][0]['name'],'orbit_tools')
+        self.assertEqual(connect.call_args.args[3]['tool_choice'],'auto')
+        connection.close.assert_called_once()
+
 if __name__=='__main__':unittest.main()

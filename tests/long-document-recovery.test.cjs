@@ -123,3 +123,11 @@ test('source review includes complementary articles omitted from a narrow sectio
 test('an explicitly researched long document cannot silently draft without any retrieved evidence',async()=>{
  let calls=0;await assert.rejects(L.build('Search and create an 8 page PDF',options({researchRequired:true,plan:async()=>{calls++;return JSON.stringify(outline);}})),/No unsourced report/);assert.equal(calls,0);
 });
+
+test('resolved scope changes cannot resume sections from a differently sized document',async()=>{
+ const store=L.createCheckpoints({indexedDB:null}),controller=new AbortController();
+ const first=options({scope:{kind:'docx',count:8},checkpointStore:store,signal:controller.signal,plan:async messages=>{const t=task(messages);if(!t.sectionNumber)return JSON.stringify(outline);if(t.sectionNumber===2){controller.abort();throw new DOMException('Stopped','AbortError');}return JSON.stringify({blocks:[block(1)]});}});
+ await assert.rejects(L.build('Now make it',first),{name:'AbortError'});
+ let planned=0;const result=await L.build('Now make it',{...first,signal:undefined,scope:{kind:'docx',count:9},plan:async messages=>{const t=task(messages);if(!t.sectionNumber){planned++;assert.equal(t.count,9);return JSON.stringify({...outline,sections:[...outline.sections,{title:'Extra section',brief:'Additional scope'}]});}return JSON.stringify({blocks:[block(t.sectionNumber)]});}});
+ assert.equal(planned,1);assert.equal(W.extract(result.text).artifacts[0].blocks.length,9);
+});

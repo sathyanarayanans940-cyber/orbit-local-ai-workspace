@@ -120,7 +120,7 @@ test('announcements cannot become fake documents and failed replies cannot recov
   const vm=require('node:vm'),context={OrbitWidgets:W,crypto:require('node:crypto').webcrypto}; vm.createContext(context);
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../widgets-ui.js'),'utf8'),context);
   assert.throws(()=>context.fallbackDocument('docx','I have created the Word document for your lab exercise. It includes implementations and results.'), /did not supply/);
-  assert.equal(context.fallbackDocument('docx','# Lab exercise\n\nActual document content.').blocks.length,2);
+  assert.throws(()=>context.fallbackDocument('docx','# Lab exercise\n\nActual document content.'),/No substitute file/);
   assert.equal(context.recoverMessageWidgets({role:'assistant',footer:'Response stopped',text:JSON.stringify(chart)}),false);
 });
 test('stream updates retain the shimmer clock', () => {
