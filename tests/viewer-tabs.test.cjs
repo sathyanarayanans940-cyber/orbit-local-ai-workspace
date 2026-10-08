@@ -28,7 +28,7 @@ test('closing active and inactive tabs chooses a neighbor, keeps downloads corre
  h.preview.close();await h.preview.open();assert.equal(h.panel.hidden,false);assert.match(h.body.innerHTML,/Open a file/);
 });
 test('tabs survive chat navigation and generated IDs from different chats do not collide',async()=>{
- const state={currentChat:'first'},h=harness({state,OrbitWidgets:{filename:spec=>spec.title+'.svg',normalize:s=>s,diagramSvg:s=>'<svg>'+s.title+'</svg>',generate:async()=>new Blob(['svg'])},widgetBlobs:new Map()});
+ const state={currentChat:'first'},h=harness({state,OrbitWidgets:{filename:spec=>spec.title+'.svg',normalize:s=>s,diagramInlineSvg:s=>'<svg>'+s.title+'</svg>',generate:async()=>new Blob(['svg'])},widgetBlobs:new Map()});
  const make=title=>({artifact:{id:'shared-import-id',spec:{kind:'diagram',title,width:300}}});
  await h.preview.show(make('First'));state.currentChat='second';await h.preview.show(make('Second'));assert.equal(h.tabs.length,2);
  h.preview.close();state.currentChat='new';await h.preview.open();assert.equal(h.controls['#preview-name'].textContent,'Second.svg');

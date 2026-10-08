@@ -291,7 +291,7 @@ const OrbitPreview = (()=> {
   const table=(headers,rows)=>`<div class="preview-table"><table><thead><tr>${headers.map(x=>`<th>${rich(x)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${row.map(x=>`<td>${rich(x)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
   function specMarkup(spec,images={}) {
     const img=b=>{const v=images[b.assetId];return v&&OrbitDocuments.validImage(v.dataUrl)?`<figure><img style="max-width:100%;max-height:650px;object-fit:contain" src="${v.dataUrl}" alt="${escapeHtml(b.caption||v.label||'Uploaded image')}"/>${b.caption?`<figcaption>${escapeHtml(b.caption)}</figcaption>`:''}</figure>`:'<p>Image unavailable; reattach the original.</p>';};
-    if(spec.kind==='diagram') return OrbitWidgets.diagramSvg(spec).replace('<svg ', `<svg style="min-width:${spec.width}px" `);
+    if(spec.kind==='diagram') return OrbitWidgets.diagramInlineSvg(spec);
     if(spec.kind==='chart') return OrbitWidgets.chartSvg(spec);
     if(spec.kind==='xlsx') return spec.sheets.map(sheet=>`<section class="preview-page"><h2>${escapeHtml(sheet.name)}</h2>${table(sheet.headers,sheet.rows)}</section>`).join('');
     const visual=v=>`<div class="preview-embedded-visual">${OrbitWidgets.visualSvg(v)}</div>`;

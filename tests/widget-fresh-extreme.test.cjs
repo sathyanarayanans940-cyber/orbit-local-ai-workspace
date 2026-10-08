@@ -107,3 +107,32 @@ test('anaphoric recovery never inherits code/ZIP/notebook authorization or futur
  assert.equal(h.ctx.requestedFileKind('now make it',[{role:'user',text:'Create a Word document.'},{role:'user',text:'Cancel that report.'}]),'');
  assert.equal(h.ctx.requestedFileKind('Explain it',[{role:'user',text:'Create a Word document.'}]),'');
 });
+
+test('one targeted schema retry repairs only the failed file and receives the exact error',async()=>{
+ let attempt=0;
+ const h=ui([fence(doc('Original')),fence('{"kind":"pdf",BAD}')].join('\n'),{repair:r=>{
+  attempt++;assert.equal(r.slots.length,1);assert.equal(r.slots[0].kind,'pdf');
+  if(attempt===1)return JSON.stringify({repairs:[{index:r.slots[0].index,widget:{kind:'pdf',title:'Requested report',blocks:[]}}]});
+  assert.match(r.slots[0].validationError,/at least|empty|item/i);assert.equal(JSON.parse(r.slots[0].draft).title,'Requested report');
+  return JSON.stringify({repairs:[{index:r.slots[0].index,widget:doc('Requested report','pdf')}]});
+ }});
+ await h.ctx.finalizeMessageWidgets(h.message,'Create a Word and PDF document');assert.equal(attempt,2);assert.equal(h.calls.generated.length,2);assert.equal(h.message.widgetError,undefined);assert.equal(h.message.artifacts[0].spec.title,'Original');
+});
+test('targeted repair stops after two schema failures and does not invent an output',async()=>{
+ const h=ui(fence('{"kind":"docx",BAD}'),{repair:r=>JSON.stringify({repairs:[{index:r.slots[0].index,widget:{kind:'docx',blocks:[]}}]})});
+ await h.ctx.finalizeMessageWidgets(h.message,'Make a Word document');assert.equal(h.calls.repairs,2);assert.equal(h.calls.generated.length,0);assert.ok(h.message.widgetError);
+});
+test('malformed single-file repair gets one parse-error retry without guessed content',async()=>{
+ let attempt=0;const h=ui(fence('{"kind":"docx",BAD}'),{history:[{role:'user',text:'Create a Word document about stacks.'}],repair:r=>{
+  attempt++;if(attempt===1)return '{"repairs":[{"index":0,"widget":{"kind":"docx","title" "Stacks","blocks":[]}}]}';
+  assert.match(r.slots[0].validationError,/not valid JSON/);assert.match(JSON.stringify(r.sourceContext),/stacks/);return JSON.stringify({repairs:[{index:0,widget:doc('Stacks')}]});
+ }});
+ await h.ctx.finalizeMessageWidgets(h.message,'Create a Word document about stacks');assert.equal(attempt,2);assert.equal(h.message.artifacts.length,1);assert.equal(h.message.widgetError,undefined);
+});
+test('cancel during second targeted repair never exports the late result',async()=>{
+ const controller=new AbortController();const h=ui(fence('{"kind":"pdf",BAD}'),{repair:r=>{
+  if(h.calls.repairs===1)return JSON.stringify({repairs:[{index:0,widget:{kind:'pdf',blocks:[]}}]});
+  controller.abort();return JSON.stringify({repairs:[{index:0,widget:doc('Late','pdf')}]});
+ }});
+ await h.ctx.finalizeMessageWidgets(h.message,'Make a PDF',controller.signal);assert.equal(h.calls.repairs,2);assert.equal(h.calls.generated.length,0);
+});
