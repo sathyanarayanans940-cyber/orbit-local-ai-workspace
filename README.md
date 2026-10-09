@@ -4,13 +4,13 @@ Personal software project: a **local AI workspace for LM Studio and Ollama**, wi
 
 **Status:** actively developed prototype. Features and regression tests are included; this portfolio snapshot does not establish production readiness or reliable output from every model. Generated content depends on the selected model.
 
-## Latest update — 8 October 2026 (revision 2)
+## Latest update — 9 October 2026
 
-Model-directed tool selection avoids mandatory web/Analyze planning for ordinary replies. Selected independent tool work can run concurrently; document generation retains complete tool schemas and requested detail. This update also includes automatic output-limit continuation, Word formatting controls and reference-style extraction, PowerPoint image handling fixes, and stronger widget recovery and context retention.
+Document exports now recover TeX in legacy formula fields through the offline equation renderer. Visible prose, tables, captions, slide notes, spreadsheet cells and diagram/chart labels convert simple notation or request bounded repair for complex expressions. Literal code and explicitly requested source files remain intact; invalid repair results cannot produce a broken download or false completion.
 
-Sparse rooted trees now support compact placement with preserved node sizes, readable labels and manual-layout protection. Chat and viewer sizing follows the rendered bounds. Failed widget repairs can receive one targeted correction using the exact validation error, without replacing successful files or retrying indefinitely.
+Document follow-ups retain earlier source recipes, formatting requirements and amended file formats within bounded context. Late file-tool requests enter the document workflow, and inherited long-document requests keep their requested scope. Cancellation and later text-only instructions are respected.
 
-Fresh regression coverage includes cancellation, malformed and mixed recipes, output limits, ZIP exports, notebooks, source files and document follow-ups. Models can still fail to provide a valid recipe; recovery is bounded and reports failure rather than fabricating a substitute document.
+The full Node suite passes **809 tests**, including actual PDF/Office exports, context boundaries, long-document routing and malformed-equation recovery. Provider responses are stubbed in deterministic integration tests; these checks do not guarantee every model will produce a valid document. Run `npm ci` followed by `npm test`.
 
 ## What to inspect
 

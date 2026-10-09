@@ -4323,10 +4323,15 @@ function parseToolRoute(text, available) {
   if(!match||text.length>65536)throw toolRouteError();
   let value;try{value=JSON.parse(match[1]);}catch(_){throw toolRouteError();}
   if(!value||Array.isArray(value)||Object.keys(value).some(k=>!['steps','files','inputs'].includes(k))||
-    !Array.isArray(value.steps)||value.steps.length>3||typeof value.files!=='boolean'||
+    !Array.isArray(value.steps)||value.steps.length>4||typeof value.files!=='boolean'||
     (value.files&&!available.files))throw toolRouteError();
+  // Local models sometimes use the native spelling despite the legacy schema.
+  // Only an enabled, final singleton files group is equivalent to files:true.
+  const steps=value.steps.slice();
+  if(steps.at(-1)?.length===1&&steps.at(-1)[0]==='files'&&value.files)steps.pop();
+  if(steps.length>3)throw toolRouteError();
   const seen=new Set();
-  for(const group of value.steps){
+  for(const group of steps){
     if(!Array.isArray(group)||!group.length||group.length>3)throw toolRouteError();
     for(const key of group){
       if(!['memory','analysis','web'].includes(key)||!available[key]||seen.has(key))throw toolRouteError();
@@ -4334,7 +4339,7 @@ function parseToolRoute(text, available) {
     }
   }
   if(!seen.size&&!value.files)throw toolRouteError();
-  const result={steps:value.steps,files:value.files};
+  const result={steps,files:value.files};
   if(value.inputs!=null){
     if(typeof value.inputs!=='object'||Array.isArray(value.inputs)||Object.keys(value.inputs).some(k=>!['memory','analysis','web'].includes(k)))throw toolRouteError();
     result.inputs={};
@@ -4345,6 +4350,18 @@ function parseToolRoute(text, available) {
     }
   }
   return result;
+}
+// Used only while routing an explicit document request. Never execute quoted
+// examples, embedded markup or control text copied from an uploaded document.
+function documentToolRoute(text, available) {
+  const source=String(text).trim();
+  if(source.startsWith('<orbit-tools>'))return parseToolRoute(source,available);
+  const match=/(?:^|\n)[ \t]*(<orbit-tools>[\s\S]*?<\/orbit-tools>)[ \t]*$/.exec(source);
+  if(!match)return null;
+  const preface=source.slice(0,match.index);
+  if(/```|~~~|<orbit-tools>|(?:^|\n)\s*>|\b(?:example|literal|syntax|quoted|sample)\b/i.test(preface))return null;
+  if(!/\b(?:generating|preparing|creating|building|drafting|writing|making|will (?:prepare|create|generate|build|draft|write|make))\b/i.test(preface))return null;
+  return parseToolRoute(match[1],available);
 }
 function createToolRouteStream(onToken) {
   const prefix='<orbit-tools>';
@@ -4392,6 +4409,8 @@ async function requestRoutedReply(prompt, originalConversation, callbacks, selec
     web:typeof OrbitWeb!=='undefined'&&(!OrbitWeb.enabled||OrbitWeb.enabled())&&!(typeof navigator!=='undefined'&&navigator.onLine===false)&&!OrbitWeb.prohibited?.(request),
     files:typeof OrbitWidgets!=='undefined'&&(!OrbitWidgets.settings||Object.values(OrbitWidgets.settings()).some(v=>v===true)),
   };
+  const documentScope=typeof OrbitLongDocuments!=='undefined'?OrbitLongDocuments.target(String(user?.text??prompt),originalConversation):null;
+  const documentExpected=available.files&&(!!documentScope||(typeof requestedFileKind==='function'&&!!requestedFileKind(String(user?.text??prompt),originalConversation)));
   const scope=originalConversation.filter(m=>m.role==='user').slice(-3).map(m=>String(m.text??'').slice(0,1000)).join('\n');
   const profile=typeof OrbitMemories!=='undefined'?OrbitMemories.profile?.(selected,scope)||'':'';
   let conversation=originalConversation;
@@ -4408,15 +4427,23 @@ async function requestRoutedReply(prompt, originalConversation, callbacks, selec
     const native=selected.provider==='OpenAI';
     let nativeRoute=null,toolPending=false,preamble='';
     const stream=createToolRouteStream(callbacks.onToken);
+    // Document routing is a control step; defer its preface so malformed local
+    // tool syntax cannot leak into the answer or bypass sectioned drafting.
+    let documentControl='';
     const reply=await requestLocalReply(prompt,[{role:'system',text:routingInstruction(available,native)+'\n\n'+(typeof OrbitWidgets!=='undefined'?OrbitWidgets.capabilityInstruction?.(String(user?.text??prompt))||'':'')+'\n\n'+profile},...conversation],{
       ...callbacks,widgets:false,streamAnswer:true,nativeToolCapabilities:native?available:undefined,
-      onToken:chunk=>{if(native){preamble+=chunk;callbacks.onToken?.(chunk);}else stream.push(chunk);},
+      onToken:chunk=>{if(documentExpected){documentControl+=chunk;return;}if(native){preamble+=chunk;callbacks.onToken?.(chunk);}else stream.push(chunk);},
       onToolPending:native?()=>{toolPending=true;}:undefined,
       onToolRoute:native?value=>{if(nativeRoute)throw toolRouteError();nativeRoute=parseToolRoute('<orbit-tools>'+JSON.stringify(value)+'</orbit-tools>',available);}:undefined,
       controlPending:native?()=>toolPending:stream.pending,
     });
-    checkAbort();route=native?nativeRoute:stream.finish(available);
-    if(!route){if(toolPending)throw toolRouteError();return reply;}
+    checkAbort();route=native?nativeRoute:documentExpected?documentToolRoute(documentControl||reply.text,available):stream.finish(available);
+    if(toolPending&&!route)throw toolRouteError();
+    // An explicit long deliverable keeps its validated scope even if the model
+    // returns only a promise or a tiny recipe instead of selecting files.
+    if(documentScope&&available.files&&!reply.footer&&OrbitWidgets.settings()[documentScope.kind])route={...(route||{steps:[]}),files:true};
+    if(!route){if(documentExpected)callbacks.onToken?.(documentControl||reply.text);return reply;}
+    if(reply.footer)return reply;
     // Providers may emit a brief preface before a call. Keep already-streamed
     // text consistent with the final persisted answer without buffering replies.
     if(native&&preamble){callbacks={...callbacks,toolPreamble:preamble+'\n\n'};callbacks.onToken?.('\n\n');}

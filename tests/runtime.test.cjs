@@ -795,3 +795,53 @@ test('offline contextual Word follow-up uses the inherited bounded drafting scop
  r.send({message:{content:'<orbit-tools>{"steps":[],"files":true}</orbit-tools>'},done:true});r.close();
  assert.equal((await pending).text,'Validated section draft');assert.equal(drafted,1);
 });
+
+test('legacy files group is canonicalized only as an enabled final singleton',()=>{
+ const c=runtime().context,available={memory:true,web:true,analysis:true,files:true};
+ const parse=value=>c.parseToolRoute('<orbit-tools>'+JSON.stringify(value)+'</orbit-tools>',available);
+ assert.deepEqual(JSON.parse(JSON.stringify(parse({steps:[['web'],['files']],files:true}))),{steps:[['web']],files:true});
+ for(const value of [{steps:[['files'],['web']],files:true},{steps:[['files','web']],files:true},{steps:[['files'],['files']],files:true},{steps:[['files']],files:false}])assert.throws(()=>parse(value),/invalid tool request/);
+ assert.throws(()=>c.parseToolRoute('<orbit-tools>{"steps":[["files"]],"files":true}</orbit-tools>',{...available,files:false}),/invalid tool request/);
+});
+test('offline long deliverable cannot fall through to short generic repair after a preface or missing route',async()=>{
+ for(const response of ['**Generating your full paper now…**\n\n<orbit-tools>{"steps":[["files"]],"files":true}</orbit-tools>','I will prepare the whole paper now.','```orbit-widget\n{"kind":"docx","blocks":[{"type":"paragraph","text":"Tiny summary"}]}\n```']){
+  const r=runtime('Ollama'),tokens=[];let drafted=0;
+  r.context.OrbitWidgets={...require('../widgets.js')};r.context.OrbitDocuments={instruction:()=>'',catalog:()=>[]};
+  r.context.OrbitLongDocuments={...require('../long-documents.js'),build:async(request,options)=>{drafted++;assert.equal(options.scope.count,12);assert.equal(options.scope.kind,'docx');assert.match(JSON.stringify(options.context),/4 Pages/);return {text:'Complete validated document'};}};
+  const messages=[{role:'user',text:'The report should be a maximum of 12 pages. Report Structure: Introduction – 4 Pages; Solution – 4 Pages; Analysis – 4 Pages. File Format: Microsoft Word Document (.docx). I will tell the topic.'},{role:'user',text:'Topic: Distributed sensors. Now make it.'},{role:'assistant',text:'An outline.'},{role:'user',text:'ok bro make a detailed word document'}];
+  const pending=r.context.requestLocalReply(messages.at(-1).text,messages,{widgets:true,onToken:s=>tokens.push(s)});await flush();
+  for(const chunk of response.match(/.{1,7}|\n/g))r.send({message:{content:chunk}});
+  r.send({done:true});r.close();assert.equal((await pending).text,'Complete validated document');assert.equal(drafted,1);assert.equal(tokens.join(''),'Complete validated document');
+ }
+});
+test('late routing recovery never treats quoted tool examples as executable plans',()=>{
+ const c=runtime().context,available={web:true,files:true};
+ for(const text of ['An example:\n```xml\n<orbit-tools>{"steps":[["web"]],"files":true}</orbit-tools>\n```','Normal <orbit-tools>{"steps":[["web"]],"files":true}</orbit-tools>','> <orbit-tools>{"steps":[["web"]],"files":true}</orbit-tools>'])assert.equal(c.documentToolRoute(text,available),null);
+});
+test('long-file routing keeps web and analysis, handles all providers, and never falls back after cancellation',async()=>{
+ for(const provider of ['OpenAI','DeepSeek','AICredits','Gemini','Ollama','LM Studio']){
+  const r=runtime(provider),tokens=[],workers=[];r.context.runtimeEndpoints.OpenAI={chat:'/openai'};r.context.runtimeEndpoints.AICredits={chat:'/aicredits'};
+  r.context.OrbitWidgets={...require('../widgets.js')};r.context.OrbitDocuments={instruction:()=>'',catalog:()=>[]};
+  r.context.OrbitWeb={research:async()=>{workers.push('web');return {instruction:'Retrieved evidence',sources:[]};}};
+  r.context.OrbitAnalyze={analyze:async()=>{workers.push('analysis');return {instruction:'Checked values'};}};
+  r.context.OrbitLongDocuments={...require('../long-documents.js'),build:async(_,opts)=>{workers.push('files');assert.match(opts.instruction,/Checked values/);assert.match(opts.instruction,/Retrieved evidence/);return {text:'Full document'};}};
+  const prompt='Search, verify calculations, and create a 12 page Word report.';
+  const pending=r.context.requestLocalReply(prompt,[{role:'user',text:prompt}],{widgets:true,onToken:t=>tokens.push(t)});await flush();
+  if(provider==='OpenAI')r.send({orbit_tool_route:{steps:[['web'],['analysis']],files:true},choices:[]});
+  const text=provider==='OpenAI'?'Preparing the report.':'Preparing the report.\n<orbit-tools>{"steps":[["web"],["analysis"],["files"]],"files":true}</orbit-tools>';
+  r.send(provider==='Ollama'?{message:{content:text},done:true}:{choices:[{delta:{content:text},finish_reason:'stop'}]});r.close();assert.equal((await pending).text,'Full document');assert.deepEqual(workers,['web','analysis','files']);assert.equal(tokens.join(''),'Full document');
+ }
+ const r=runtime('Ollama'),controller=new AbortController();r.context.OrbitWidgets={...require('../widgets.js')};r.context.OrbitLongDocuments={...require('../long-documents.js'),build:()=>assert.fail('Cancelled build')};
+ const p=r.context.requestLocalReply('Create a 12 page Word report',[{role:'user',text:'Create a 12 page Word report'}],{widgets:true,signal:controller.signal}),failure=assert.rejects(p,{name:'AbortError'});await flush();controller.abort();await failure;
+});
+test('late file routing does not execute literal unfenced examples',()=>{
+ const c=runtime().context;assert.equal(c.documentToolRoute('Here is an example:\n<orbit-tools>{"steps":[["web"]],"files":true}</orbit-tools>',{web:true,files:true}),null);
+});
+test('recovered long-paper route runs real section validation and rejects a tiny repaired paper',async()=>{
+ const r=runtime('Ollama'),L=require('../long-documents.js'),tokens=[];let calls=0;
+ r.context.OrbitWidgets={...require('../widgets.js')};r.context.OrbitDocuments={instruction:()=>'',catalog:()=>[]};
+ r.context.OrbitLongDocuments={...L,build:(request,opts)=>L.build(request,{...opts,checkpointStore:L.createCheckpoints({indexedDB:null}),plan:async messages=>{calls++;const task=JSON.parse(messages[1].text);return JSON.stringify(task.sectionNumber?{blocks:[{type:'paragraph',text:'Only a tiny summary.'}]}:{title:'Paper',sections:Array.from({length:12},(_,i)=>({title:'Part '+i,brief:'Distinct substantive coverage'}))});}})};
+ const messages=[{role:'user',text:'Create a 12 page Word report on distributed sensors.'}];
+ const pending=r.context.requestLocalReply(messages[0].text,messages,{widgets:true,onToken:t=>tokens.push(t)}),failure=assert.rejects(pending,/Section is too thin/);await flush();
+ r.send({message:{content:'Generating the full paper now.\n<orbit-tools>{"steps":[["files"]],"files":true}</orbit-tools>'},done:true});r.close();await failure;assert.equal(calls,4);assert.deepEqual(tokens,[]);
+});

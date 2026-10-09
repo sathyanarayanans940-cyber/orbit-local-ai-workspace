@@ -10,6 +10,25 @@ function ui(text,{history=[],repair,generate,settings}={}){
  vm.createContext(ctx);vm.runInContext(fs.readFileSync(require.resolve('../widgets-ui.js'),'utf8'),ctx);return {ctx,message,calls};
 }
 
+test('raw TeX in document prose requests targeted repair with source, then exports the corrected file',async()=>{
+ const {generate}=await import('../widgets-engine.js');
+ const original={kind:'pdf',title:'Ratio report',blocks:[{type:'paragraph',text:String.raw`The measured ratio is \frac{a+b}{c}. Retain the qualification: c is nonzero.`}]};
+ const fixed={...original,blocks:[{type:'paragraph',text:'The measured ratio is given below. Retain the qualification: c is nonzero.'},{type:'math',latex:String.raw`\frac{a+b}{c}`}]};
+ const h=ui(fence(original),{generate,repair:r=>{
+  assert.match(JSON.stringify(r.slots),/Raw LaTeX/);assert.match(JSON.stringify(r.slots),/nonzero/);
+  return JSON.stringify({repairs:[{index:0,widget:fixed}]});
+ }});
+ await h.ctx.finalizeMessageWidgets(h.message,'Create a PDF ratio report');
+ assert.equal(h.calls.repairs,1);assert.equal(h.calls.generated.length,1);assert.equal(h.message.widgetError,undefined);assert.equal(h.message.artifacts.length,1);
+ assert.match(h.message.artifacts[0].spec.blocks[0].text,/c is nonzero/);assert.equal(h.message.artifacts[0].spec.blocks[1].latex,String.raw`\frac{a+b}{c}`);
+});
+test('a repair that repeats raw TeX cannot export a broken document or announce success',async()=>{
+ const original={kind:'docx',blocks:[{type:'table',headers:['Ratio'],rows:[[String.raw`\frac{a+b}{c}`]]}]};
+ const h=ui(fence(original),{repair:()=>JSON.stringify({repairs:[{index:0,widget:original}]})});
+ await h.ctx.finalizeMessageWidgets(h.message,'Create a Word document');
+ assert.equal(h.calls.repairs,2);assert.equal(h.calls.generated.length,0);assert.ok(h.message.widgetError);assert.doesNotMatch(h.message.text,/Done —/);
+});
+
 test('repair cannot exceed four file/chart widgets when malformed slots precede valid ones',async()=>{
  const h=ui([fence('{"kind":"pdf",BAD}'),fence('{"kind":"docx",BAD}'),...Array.from({length:3},(_,i)=>fence(doc('Good '+i)))].join('\n'),{repair:r=>JSON.stringify({repairs:r.slots.map(s=>({index:s.index,widget:doc('Repaired '+s.index,s.kind)}))})});
  await h.ctx.finalizeMessageWidgets(h.message,'Create Word and PDF documents');

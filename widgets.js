@@ -214,6 +214,18 @@
     }
     return visuals;
   }
+  function formulaLatex(value,condition) {
+    const plain=v=>typeof v==='string'?v:(v||[]).map(r=>r.text).join('');
+    const isTex=s=>!/[A-Za-z]:\\/.test(s)&&(/\\[a-zA-Z]+\b|[_^]\s*\{/.test(s)||/^\s*(?:\$\$[\s\S]+\$\$|\$[^$]+\$|\\\[[\s\S]*\\\]|\\\([\s\S]*\\\))\s*$/.test(s));
+    const unwrap=s=>s.trim().replace(/^\$\$([\s\S]*)\$\$$/,'$1').replace(/^\$([^$]*)\$$/,'$1').replace(/^\\\[([\s\S]*)\\\]$/,'$1').replace(/^\\\(([\s\S]*)\\\)$/,'$1');
+    const literal=s=>'\\text{'+s.replace(/[\\{}%$#&_]/g,c=>c==='\\'?'\\backslash{}':'\\'+c).replace(/\^/g,'\\textasciicircum{}').replace(/~/g,'\\textasciitilde{}')+'}';
+    const content=plain(value),note=plain(condition);
+    if(!isTex(content)&&!isTex(note))return null;
+    const render=s=>isTex(s)?unwrap(s):literal(s);
+    const rows=/\\begin\{/.test(content)?[render(content)]:content.split(/\r?\n/).map(render);
+    if(note)rows.push(render(note));
+    return text(rows.length===1?rows[0]:'\\begin{gathered}'+rows.join(' \\\\ ')+'\\end{gathered}',4000);
+  }
   function blocks(value) {
     const expanded=list(value,640).flatMap(b=>{
       if(b?.type!=='table')return [b];
@@ -233,6 +245,8 @@
         if(!(typeof value==='string'?value:value.map(r=>r.text).join('')).trim())throw new Error('A formula needs nonempty text. Use ordinary mathematical notation, not TeX commands.');
         const condition=b.condition===undefined?undefined:richText(b.condition,500);
         if(condition!==undefined&&!(typeof condition==='string'?condition:condition.map(r=>r.text).join('')).trim())throw new Error('A formula condition must contain text. Omit it for an unconditional formula.');
+        const latex=formulaLatex(value,condition);
+        if(latex)return {type:'math',latex,caption:text(b.caption||'',500)};
         return {type:'formula',text:value,...(condition===undefined?{}:{condition}),caption:text(b.caption||'',500)};
       }
       if (b.type === 'math') return {type:'math',latex:text(b.latex,4000),caption:text(b.caption||'',500)};
@@ -269,7 +283,61 @@
     const aliases={word:'docx',doc:'docx',powerpoint:'pptx',ppt:'pptx',excel:'xlsx',notebook:'ipynb'};
     return typeof kind==='string'?(aliases[kind.toLowerCase()]||kind.toLowerCase()):kind;
   }
+  // Exported prose is not a TeX renderer. Convert unambiguous symbols and
+  // linear notation; require complex expressions to use the math renderer.
+  function documentProse(value,path) {
+    const symbols={alpha:'α',beta:'β',gamma:'γ',delta:'δ',epsilon:'ε',theta:'θ',lambda:'λ',mu:'μ',pi:'π',rho:'ρ',sigma:'σ',tau:'τ',phi:'φ',omega:'ω',Gamma:'Γ',Delta:'Δ',Theta:'Θ',Lambda:'Λ',Pi:'Π',Sigma:'Σ',Phi:'Φ',Omega:'Ω',times:'×',cdot:'·',le:'≤',leq:'≤',ge:'≥',geq:'≥',ne:'≠',neq:'≠',approx:'≈',equiv:'≡',infty:'∞',pm:'±',mp:'∓',to:'→',rightarrow:'→',leftarrow:'←',leftrightarrow:'↔',Rightarrow:'⇒',Leftarrow:'⇐',in:'∈',notin:'∉',subset:'⊂',subseteq:'⊆',cup:'∪',cap:'∩',emptyset:'∅',forall:'∀',exists:'∃',partial:'∂',nabla:'∇',log:'log',ln:'ln',sin:'sin',cos:'cos',tan:'tan',min:'min',max:'max'};
+    const error=()=>{throw Error(`Raw LaTeX in ${path}. Preserve the surrounding content; move complex equations into a math block (or a slide math field), or rewrite this field using unambiguous plain notation. Use code blocks for intentional literal TeX source.`);};
+    // Preserve explicit code spans, URLs and filesystem paths as literal data.
+    const protectedParts=[];
+    let marker='\uE000';while(value.includes(marker))marker+='\uE000';
+    let source=value.replace(/`+[^`\n]*`+|(?:https?:\/\/|[A-Za-z]:\\|\\\\[\w.-]+\\)[^\s]+/g,s=>{protectedParts.push(s);return marker+(protectedParts.length-1)+'\uE001';});
+    const convert=s=>{
+      s=s.replace(/\\(text|mathrm|operatorname)\{([^{}\\]*)\}/g,'$2');
+      s=s.replace(/\\([A-Za-z]+)(?![A-Za-z])/g,(all,name)=>Object.hasOwn(symbols,name)?symbols[name]:all);
+      const superMap={'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹','+':'⁺','-':'⁻','n':'ⁿ','i':'ⁱ'};
+      s=s.replace(/([_^])\{([^{}\\]+)\}/g,(_,op,arg)=>op==='^'&&[...arg].every(c=>superMap[c])?[...arg].map(c=>superMap[c]).join(''):op+'('+arg+')');
+      s=s.replace(/\^([0-9ni])\b/g,(_,v)=>superMap[v]);
+      s=s.replace(/\\([%&#])/g,'$1');
+      if(/\\(?![nrt](?![A-Za-z]))[A-Za-z]+|\\[()[\]]|\\\\|\\[nrt]\s*\{|\\[α-ωΑ-Ω×·≤≥≠≈≡∞±∓→←↔⇒⇐∈∉⊂⊆∪∩∅∀∃∂∇]|[_^]\s*\{|\$\$/.test(s))error();
+      return s;
+    };
+    source=source.replace(/\\\(([\s\S]*?)\\\)|\\\[([\s\S]*?)\\\]|\$\$([\s\S]*?)\$\$|\$([^$\n]+)\$/g,(all,a,b,c,d)=>{
+      // A pair of currency prices is not a math delimiter pair.
+      if(d!==undefined&&/^\s*\d/.test(d)&&!/[=<>_^\\]/.test(d))return all;
+      return convert(a??b??c??d);
+    });
+    source=convert(source);
+    return source.replace(new RegExp(marker+'(\\d+)\uE001','g'),(_,i)=>protectedParts[Number(i)]);
+  }
+  function cleanDocumentText(spec) {
+    const fields=new Set(['title','text','caption','condition','label','name','notes','subtitle','kicker','body','value','detail','quote','attribution','unit','xLabel','yLabel','headers','rows','items','bullets','labels','rowLabels']);
+    const visit=(v,path='',rendered=false)=>{
+      if(typeof v==='string')return rendered?documentProse(v,path):v;
+      if(Array.isArray(v)){
+        const result=v.map((item,i)=>visit(item,path+'['+i+']',rendered));
+        if(rendered&&v.length&&v.every(run=>run&&typeof run==='object'&&typeof run.text==='string')){
+          const joined=v.map(run=>run.text).join('');
+          if(documentProse(joined,path)!==result.map(run=>run.text).join(''))throw Error(`Raw LaTeX split across styled text in ${path}. Keep each expression in a single text run or move it into a math block, preserving the surrounding content and styles.`);
+        }
+        return result;
+      }
+      if(!v||typeof v!=='object')return v;
+      if(v.type==='code')return v;
+      const result={};
+      for(const [key,item] of Object.entries(v)){
+        if(['style','font','latex','math','filename','content','notebook','id','artifactId','assetId','source','target'].includes(key)){result[key]=item;continue;}
+        result[key]=visit(item,path?path+'.'+key:key,fields.has(key));
+      }
+      return result;
+    };
+    return visit(spec);
+  }
   function normalize(raw) {
+    const spec=normalizeRaw(raw);
+    return ['pdf','docx','pptx','xlsx','chart','diagram'].includes(spec.kind)?cleanDocumentText(spec):spec;
+  }
+  function normalizeRaw(raw) {
     if(raw && typeof raw.kind==='string')raw={...raw,kind:canonicalKind(raw.kind)};
     if (!raw || !KINDS.includes(raw.kind)) throw new Error('Widget kind must be pdf, docx, pptx, xlsx, chart, diagram, text, ipynb or zip; use kind:"docx" for Word.');
     if (JSON.stringify(raw).length > (raw.kind==='zip'?1500000:480000)) throw new Error('This widget is too large. Split it into smaller files.');
@@ -439,7 +507,7 @@ Diagram schema: width 200..2400, height 120..4000; <=80 nodes, <=160 edges per s
 Diagram layout: single-letter graph/tree nodes should be circles 48–64px wide, not large boxes. Leave at least 24px between node boundaries; leave roughly 56–80px clear vertical space between levels, with more room only for long connector labels. Do not spread a small tree across an unnecessarily large canvas. Set width explicitly. triangles use three triangular positions, trees put roots above children and reserve each subtree its own horizontal space, stacks place cells vertically with top labeled, queues place cells horizontally with front/rear labeled. Preserve stable coordinates/IDs between algorithm steps; highlight the changed nodes with color and explain changes in prose. For assignments first determine all requested steps, then emit explanation + complete diagram snapshot + next explanation + next snapshot, continuing to the final state in the SAME reply. Use a numbered Markdown heading (### Step 1: ...) for each illustrated algorithm step. Each snapshot needs its OWN orbit-widget fence with all its nodes/edges; never assume earlier nodes are inherited. A step that only changes the queue, visited set, or current node still needs its own snapshot when teaching step by step. Do not stop after one diagram or merge all snapshots at the end. Use small focused diagrams for clarity. Complete every requested step within the 32-snapshot limit; if more are needed, explicitly offer continuation rather than silently dropping steps.
 PDF/Word: {"kind":"pdf" or "docx","title":"Report","blocks":[{"type":"heading","text":"Overview","level":1},{"type":"paragraph","text":"Content"},{"type":"bullets","items":["Item"]},{"type":"table","headers":["Name","Value"],"rows":[["A","12"]]}]}. Supply complete useful content, not placeholders. Up to 640 blocks per document; tables up to 8 columns and 150 rows. No Markdown in text fields.
 Document design: PDF/Word accept top-level "style":{"theme":"classic|ocean|forest|plum|terracotta|slate","font":"sans|serif|mono","border":"none|rule|frame","pageSize":"A4|Letter","accent":"optional six-digit hex"}. Default classic is restrained. Choose cohesive colors when useful/requested. Fonts are embedded offline in PDF. Word uses common matching font families. Blocks also support {"type":"callout","title":"Key result","text":"...","tone":"info|success|warning"} and {"type":"divider"}. Use these sparingly.
-Mathematics in files: PDF/Word support {"type":"formula","text":"F = m × a\\n= 2 × 3\\n= 6 N","caption":"optional explanation"}. This is ordinary centered text, editable in Word; prefer it for readable formulas and numerical substitutions, with Unicode symbols such as Σ, √, ×, ² or unambiguous linear notation and parentheses. No dollar delimiters or TeX commands in formula text. Conditional formulas and recurrence cases use a separate condition field, for example {"type":"formula","text":"f(x) = x²","condition":"if x ≥ 0","caption":"optional explanation"}. The condition is placed directly below its formula. Use a separate formula block for each case; never align conditions with tabs, padded spaces or improvised columns, and do not squeeze a long formula and its condition onto the same line. Default to one equality step per line, centering each complete line independently. Keep the left side and initial formula together on the first line; begin each later line with =, without indenting it to align equals signs. For multiline LaTeX use gathered, not aligned; use separate formula blocks or JSON newline escapes within one formula block. Explain the steps in surrounding paragraphs. Compact equality chains are allowed if the user explicitly requests brevity. PowerPoint can also use ordinary Unicode formula text in a centered quote or text column; math is optional. LaTeX is OPTIONAL: use {"type":"math","latex":"TeX equation without dollar delimiters","caption":"optional explanation"} for complex fractions, integrals or matrices when it improves readability or is requested. PPT slides accept "math":"TeX equation", layout:"visual", optional caption and at most two short bullets, instead of image/visual/table. JSON-escape every TeX backslash. Plain text fields do not interpret TeX. Equations are rendered offline, not executable code. Split long equations; rendered LaTeX is not an editable Office equation. Do not alter code blocks or intentional chat LaTeX formatting.
+Mathematics in files: PDF/Word support {"type":"formula","text":"F = m × a\\n= 2 × 3\\n= 6 N","caption":"optional explanation"}. This is ordinary centered text, editable in Word; prefer it for readable formulas and numerical substitutions, with Unicode symbols such as Σ, √, ×, ² or unambiguous linear notation and parentheses. No dollar delimiters or TeX commands in formula text. Conditional formulas and recurrence cases use a separate condition field, for example {"type":"formula","text":"f(x) = x²","condition":"if x ≥ 0","caption":"optional explanation"}. The condition is placed directly below its formula. Use a separate formula block for each case; never align conditions with tabs, padded spaces or improvised columns, and do not squeeze a long formula and its condition onto the same line. Default to one equality step per line, centering each complete line independently. Keep the left side and initial formula together on the first line; begin each later line with =, without indenting it to align equals signs. For multiline LaTeX use gathered, not aligned; use separate formula blocks or JSON newline escapes within one formula block. Explain the steps in surrounding paragraphs. Compact equality chains are allowed if the user explicitly requests brevity. PowerPoint can also use ordinary Unicode formula text in a centered quote or text column; math is optional. LaTeX is OPTIONAL: use {"type":"math","latex":"TeX equation without dollar delimiters","caption":"optional explanation"} for complex fractions, integrals or matrices when it improves readability or is requested. PPT slides accept "math":"TeX equation", layout:"visual", optional caption and at most two short bullets, instead of image/visual/table. JSON-escape every TeX backslash. Plain text fields do not interpret TeX. In ALL exported titles, paragraphs, table cells, captions, slide notes, spreadsheet cells and visual labels, use readable Unicode/plain notation. Put complex equations in supported rendered math fields and retain their surrounding explanation; never print raw TeX commands or delimiters in visible prose. Keep an equation together in one text run. Intentional literal source belongs in code blocks or explicitly requested source files. Equations are rendered offline, not executable code. Split long equations; rendered LaTeX is not an editable Office equation. Do not alter code blocks or intentional chat LaTeX formatting.
 Worked solutions: For question papers, assignment solutions and step-by-step explanations, default to complete working for EVERY question and subpart unless the user explicitly asks for answers only. Analyze checks correctness; it must NOT shorten the solution. Inside the requested file include given data/assumptions, the method and why it applies, formula, actual substitutions, intermediate calculations, final answer with sensible rounding/units, and interpretation. Use working tables where relevant: Pearson/regression need x, y, x², y², xy totals or equivalent centred sums, means, slopes/intercepts and predictions; Spearman needs both rank columns, d, d², their sum and substitution (handle ties correctly); probabilities need the event translated into bounds, distribution parameters and tail/standardisation steps; hypothesis tests need hypotheses, statistic substitution, rejection rule/p-value and conclusion. These are examples, not an exhaustive list: for other subjects use the appropriate derivation, proof, algorithm trace, units or worked examples rather than copying statistics tables. Preserve all supplied subparts and explain any ambiguity instead of inventing values. A formula plus an answer, or a summary table alone, is not step by step. Never promise full working unless it is included. For file-only requests keep the chat introduction brief and put the complete explanation in the file. If the user also asks for the full solution in chat, include complete working in BOTH chat and each requested file; never substitute a short chat summary or refer to the file instead of showing the requested steps. The hidden Analyze log is never the explanation. The renderer adds the document title automatically; do not repeat it as the first heading.
 Embedded visuals: PDF/Word blocks support {"type":"visual","visual":{full Orbit diagram or chart recipe},"caption":"...","widthPercent":100}. PowerPoint slides support "visual":{full Orbit diagram or chart recipe}, "caption":"...", instead of image/table. You can also use "visual":{"artifactId":"ID from the available visuals catalog"} to reuse a prior chat diagram/chart exactly. Put requested diagrams/graphs INSIDE the file recipe; a separate chat visual is not a substitute. Every embedded recipe includes its own kind:"diagram" or kind:"chart", title, and complete data. Diagram example: "visual":{"kind":"diagram","title":"Flow","width":600,"height":220,"nodes":[{"id":"a","label":"Input","x":120,"y":110},{"id":"b","label":"Output","x":440,"y":110}],"edges":[{"from":"a","to":"b"}]}. Use the same diagram/chart schema described above. For a complex diagram give it a full slide and put detail in notes; split very large architecture diagrams into an overview and detailed slides. Never invent chart data.
 Word formatting: For DOCX only, explicit user formatting overrides the selected sample, which overrides Orbit defaults. Use style.templateId from the available Word samples ONLY when asked to follow that sample; never invent IDs or adopt the formatting of an ordinary question paper. Put explicit overrides in style.word. Supported roles: body,title,heading1,heading2,code,caption,tableHeader,tableBody; each accepts {font:"Times New Roman",size:12,color:"000000",bold:false,italic:false,underline:false,alignment:"left|center|right|justify",lineSpacing:1.5,spaceBefore:0,spaceAfter:6}. Sizes and spacing are points; lineSpacing is a multiplier. Word run overrides also accept font and size. Page options: style.word.page:{width:8.5,height:11,margins:{top:1,right:1,bottom:1,left:1},borderOffset:"page|text",borders:{top:{style:"single|double|dashed|dotted|none",color:"000000",width:1,space:24},right:{...},bottom:{...},left:{...}}}. Page dimensions and margins are inches; border width and space are points. Set every side to style:"none" to remove a template border. style.word.pageNumbers:false omits the generated footer. Omit unspecified fields to inherit the sample. When using a sample, do not fill style.word with Orbit defaults. This follows typography and page formatting, not exact template content/layout: headers, logos, decorative borders, custom lists and complex multi-section layouts are not cloned. Font names are preserved in DOCX; unavailable fonts may be substituted by Word. PDF retains its bundled sans/serif/mono choices; do not claim arbitrary DOCX font fidelity in PDF.
