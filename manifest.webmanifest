@@ -1,5 +1,5 @@
 {
-  "name": "Orbit — Local AI workspace",
+  "name": "Orbit",
   "short_name": "Orbit",
   "description": "A private local AI workspace for Ollama and LM Studio.",
   "start_url": "./",

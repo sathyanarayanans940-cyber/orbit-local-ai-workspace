@@ -9,7 +9,7 @@ test('task-scoped schema preserves full requested tools and all diagram/chart op
 test('file cache evicts by bytes, replacements release old bytes, and huge binaries are not retained',()=>{
  const src=fs.readFileSync('widgets-ui.js','utf8').split('const widgetBusy')[0];const c=vm.createContext({});vm.runInContext(src+'\nglobalThis.cache=widgetBlobs;',c);const m=c.cache;
  m.set('a',{size:20*1024*1024});m.set('b',{size:20*1024*1024});assert.equal(m.size,1);assert.ok(m.has('b'));
- m.set('b',{size:5});assert.equal(m.bytes,5);m.set('huge',{size:50*1024*1024});assert.equal(m.size,0);assert.equal(m.bytes,0);
+ m.set('b',{size:5});assert.equal(m.bytes,5);m.set('huge',{size:50*1024*1024});assert.equal(m.size,1);assert.equal(m.bytes,5);assert.equal(m.has('huge'),false);
  for(let i=0;i<30;i++)m.set(i,{size:100});assert.equal(m.size,16);m.clear();assert.equal(m.bytes,0);
 });
 test('reader loading shares in-flight requests, retries a failure, and keeps startup lean',async()=>{

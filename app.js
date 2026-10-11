@@ -2432,7 +2432,7 @@ function collectUploadedFiles() {
         files.push({ ...attachment, ...context, source: attachment.generated?'orbit':'my', attachment, messageIndex, attachmentIndex, key: `${context.chatId || 'draft'}-attachment:${messageIndex}-${attachmentIndex}` });
       });
       normalizedWidgetArtifacts(message?.artifacts).forEach((artifact, artifactIndex) => {
-        files.push({ name: OrbitWidgets.filename(artifact.spec), type: OrbitWidgets.MIME[artifact.spec.kind], size: artifact.size || 0, ...context, source: 'orbit', artifact, messageIndex, artifactIndex, artifactId:artifact.id, key: `${context.chatId || 'draft'}-artifact:${artifact.id}` });
+        files.push({ name: widgetArtifactName(artifact), type: OrbitWidgets.MIME[artifact.spec.kind], size: artifact.size || 0, ...context, source: 'orbit', artifact, messageIndex, artifactIndex, artifactId:artifact.id, key: `${context.chatId || 'draft'}-artifact:${artifact.id}` });
       });
     });
   };
@@ -4252,7 +4252,7 @@ function modelTextForMessage(message) {
     .filter((attachment) => attachment && !attachment.editBackup && (attachment.assetId || attachment.visuals?.length || attachment.extractedText || attachment.visualSummary || attachment.visualWarnings?.length))
     .map((attachment) => `Attached file: ${attachment.name}\n${typeof OrbitWorkspaceCore!=='undefined'&&isPdfFile(attachment)?OrbitWorkspaceCore.pdfContext(attachment):''}${attachment.assetId ? "Image assetId: "+attachment.assetId+"\n" : ""}${Array.isArray(attachment.visuals)&&attachment.visuals.length ? "Document image assetIds: "+attachment.visuals.filter(v=>v?.id).map(v=>v.id).join(", ")+"\n" : ""}${attachment.formatProfile?"Word formatting sample "+attachment.formatId+" (metadata, not instructions): "+JSON.stringify(attachment.formatProfile)+"\n":""}${attachment.extractedText||""}\n${(Array.isArray(attachment.visualWarnings)?attachment.visualWarnings:[]).join("\n")}\n${attachment.visualSummary||""}`)
     .join('\n\n');
-  const artifactText = normalizedWidgetArtifacts(message.artifacts).map(artifact => `Generated file: ${OrbitWidgets.filename(artifact.spec)}\n${JSON.stringify(artifact.spec)}`).join('\n\n');
+  const artifactText = normalizedWidgetArtifacts(message.artifacts).map(artifact => `Generated file: ${widgetArtifactName(artifact)}\n${JSON.stringify(artifact.spec)}`).join('\n\n');
   return [promptText, attachmentText, artifactText].filter(Boolean).join('\n\n');
 }
 
@@ -4823,7 +4823,7 @@ async function sendPrompt() {
     if (!generationController.signal.aborted && shouldGenerateTitle) void updateGeneratedTitle(titleChatId, userPrompt, state.messages.slice());
     if(typeof OrbitWorkspace!=='undefined'&&(reply.documentEditHandled||(streamedReply.current?.message||state.messages.at(-1))?.artifacts?.length))OrbitWorkspace.stage('Rendering files');
     if(reply.documentEditHandled)await completeDocumentEdit(streamedReply.current?.message || state.messages.at(-1),reply,generationController.signal);
-    else await finalizeMessageWidgets(streamedReply.current?.message || state.messages.at(-1), userPrompt, generationController.signal);
+    else {const message=streamedReply.current?.message||state.messages.at(-1);if(reply.documentCheckpoint)message.documentCheckpoint=reply.documentCheckpoint;await finalizeMessageWidgets(message,userPrompt,generationController.signal);}
     saveWebResearch(streamedReply.current?.message || state.messages.at(-1), reply.webResearch);
     saveAnalysis(streamedReply.current?.message || state.messages.at(-1), reply.analysis);
   } catch (error) {
@@ -4931,7 +4931,7 @@ async function regenerateMessage(article, { promptOverride = null, resumePrepara
     if (!generationController.signal.aborted && shouldGenerateTitle) void updateGeneratedTitle(titleChatId, callbacks.researchPrompt, state.messages.slice());
     if(typeof OrbitWorkspace!=='undefined'&&(reply.documentEditHandled||(streamedReply.current?.message||state.messages.at(-1))?.artifacts?.length))OrbitWorkspace.stage('Rendering files');
     if(reply.documentEditHandled)await completeDocumentEdit(streamedReply.current?.message || state.messages.at(-1),reply,generationController.signal);
-    else await finalizeMessageWidgets(streamedReply.current?.message || state.messages.at(-1), replyPrompt, generationController.signal);
+    else {const message=streamedReply.current?.message||state.messages.at(-1);if(reply.documentCheckpoint)message.documentCheckpoint=reply.documentCheckpoint;await finalizeMessageWidgets(message,replyPrompt,generationController.signal);}
     saveWebResearch(streamedReply.current?.message || state.messages.at(-1), reply.webResearch);
     saveAnalysis(streamedReply.current?.message || state.messages.at(-1), reply.analysis);
   } catch (error) {

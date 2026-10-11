@@ -1,16 +1,18 @@
-# Orbit local AI workspace
+# Orbit
 
 Personal software project: a **local AI workspace for LM Studio and Ollama**, with optional **Google Gemini, DeepSeek and OpenAI API integrations**. Built with JavaScript, Python provider adapters, IndexedDB and offline document libraries for file uploads, previews and document generation.
 
 **Status:** actively developed prototype. Features and regression tests are included; this portfolio snapshot does not establish production readiness or reliable output from every model. Generated content depends on the selected model.
 
-## Latest update — 9 October 2026
+## Latest update — 11 October 2026
 
-Document exports now recover TeX in legacy formula fields through the offline equation renderer. Visible prose, tables, captions, slide notes, spreadsheet cells and diagram/chart labels convert simple notation or request bounded repair for complex expressions. Literal code and explicitly requested source files remain intact; invalid repair results cannot produce a broken download or false completion.
+macOS now holds Orbit’s IPv4 and IPv6 HTTPS listeners through launchd, keeping them reserved across server crashes and restarts. Health checks trigger recovery after repeated local failures, silent TLS connections cannot block the accept loop, and development copies cannot take the installed service’s port. Fresh installs include this configuration; existing installations need the full updater, without `--web-only`.
 
-Document follow-ups retain earlier source recipes, formatting requirements and amended file formats within bounded context. Late file-tool requests enter the document workflow, and inherited long-document requests keep their requested scope. Cancellation and later text-only instructions are respected.
+Saved document recipes that fail current validation remain recoverable through **Repair file**. Completed long-document drafts survive failed exports and reloads until the files and chat save succeed. Document sections receive content-based length allocations, relevant source bodies can be selected and expanded during drafting, and the binary cache uses access-based eviction. Page counts remain estimates, and model output still requires validation.
 
-The full Node suite passes **809 tests**, including actual PDF/Office exports, context boundaries, long-document routing and malformed-equation recovery. Provider responses are stubbed in deterministic integration tests; these checks do not guarantee every model will produce a valid document. Run `npm ci` followed by `npm test`.
+Validation: **821 Node tests passed**. The Python suite ran 139 tests successfully (125 passed, 14 skipped); the final focused runtime suite passed 6 tests, including an additional updater migration check. An isolated macOS service recovered from two forced crashes while competing port binds were rejected. Packaged installer checks passed fresh install, reinstall, certificate recovery, asset parity and live IPv4/IPv6 HTTPS serving. These checks do not guarantee uninterrupted service through power loss, OS failure or an administrator disabling the service.
+
+Run `npm ci` followed by `npm test`. Python regression tests are under `tests/`; some platform-specific checks require macOS and a desktop launchd session.
 
 ## What to inspect
 

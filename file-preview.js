@@ -125,7 +125,7 @@ const OrbitPreview = (()=> {
     if(a?.file&&!a.previewId){const id=await store(a.file);if(id&&entry.source===source){a.previewId=id;delete a.file;}}
     if(!entries.includes(entry)||entry.source!==source)return;
     // Blob URLs and File objects are transient. Keep only reconstructable source data.
-    const snapshot=source.artifact?{artifact:{id:source.artifact.id,spec:source.artifact.spec,imageAssets:source.artifact.imageAssets||{},archiveSources:source.artifact.archiveSources||{},revision:source.artifact.revision||0}}:
+    const snapshot=source.artifact?{artifact:{id:source.artifact.id,spec:source.artifact.spec,needsRepair:!!source.artifact.needsRepair,imageAssets:source.artifact.imageAssets||{},archiveSources:source.artifact.archiveSources||{},revision:source.artifact.revision||0}}:
       {attachment:Object.fromEntries(['name','type','size','previewId','extractedText','dataUrl'].filter(key=>a[key]!==undefined).map(key=>[key,a[key]]))};
     await viewerRecord(entry.storageId,snapshot);
     if(entries.includes(entry))saveSession();
@@ -236,7 +236,7 @@ const OrbitPreview = (()=> {
   }
   async function show(source){
     if(!source?.attachment&&!source?.artifact)return;
-    const key=identity(source),name=source.artifact?OrbitWidgets.filename(source.artifact.spec):source.attachment.name||'File';
+    const key=identity(source),name=source.artifact?(source.artifact.needsRepair?String(source.artifact.spec.title||'Saved file'):OrbitWidgets.filename(source.artifact.spec)):source.attachment.name||'File';
     const ref=fileRef(source.ref);
     let entry=entries.find(entry=>entry.key===key||source.attachment?.previewId&&(entry.source?.attachment?.previewId||entry.previewId)===source.attachment.previewId || ref&&entry.ref?.chatId===ref.chatId && (ref.artifactId?entry.ref.artifactId===ref.artifactId:ref.messageIndex===entry.ref.messageIndex&&ref.attachmentIndex!==undefined&&ref.attachmentIndex===entry.ref.attachmentIndex));
     if(!entry){const kind=source.artifact?.spec.kind?.toUpperCase()||(/\.([^.]+)$/.exec(name)?.[1]||'TEXT').slice(0,6).toUpperCase();entry={id:`viewer-tab-${++nextId}`,storageId:token(),key,name,kind,source:source.artifact?{artifact:source.artifact}:{attachment:{...source.attachment}},ref,zoom:1,scrollTop:0,scrollLeft:0,position:{},origin:Object.hasOwn(source,'chatId')?source.chatId:(typeof state==='undefined'?null:state.currentChat),original:source.attachment&&!source.attachment.file&&!source.attachment.previewId&&isPdfFile(source.attachment)?source.attachment:null};entries.push(entry);}
@@ -446,6 +446,7 @@ const OrbitPreview = (()=> {
       downloadBlob=blob;download.disabled=!blob;
       if(!artifact&&blob&&isSpreadsheetFile(attachment)&&!window.XLSX){await OrbitDocuments.ensureReaders('excel');if(request!==serial)return;}
       if(artifact) {
+        if(artifact.needsRepair)throw Error('This saved file needs a format repair. Use Repair file on its chat card; the original content is preserved.');
         if(artifact.spec.kind==='pptx') {
           const markup=await OrbitWidgets.generate(artifact.spec,{images:artifact.imageAssets||{},preview:true});
           if(request!==serial)return;

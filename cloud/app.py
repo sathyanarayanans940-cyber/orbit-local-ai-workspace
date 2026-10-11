@@ -153,7 +153,6 @@ def create_app(config=None):
         html = html.replace('</head>', '<script src="/cloud-config.js"></script></head>')
         html = html.replace('</body>', '<script src="/cloud-ui.js"></script></body>')
         html = html.replace('A private local AI workspace for Ollama and LM Studio.', 'Your personal Orbit workspace with Ollama Cloud.')
-        html = html.replace('Orbit — Local AI workspace', 'Orbit — Cloud workspace')
         html = html.replace('Message your local model', 'Message your cloud model')
         html = html.replace('Local models run on your machine. Responses may still be inaccurate.', 'Models run on Ollama Cloud. Responses may still be inaccurate.')
         # Token originates from our session, never from a model or document.

@@ -37,9 +37,9 @@ test('changed source evidence invalidates checkpoint; drafts expire and cache is
  const reload=L.createCheckpoints({indexedDB,now:()=>clock});assert.equal(await reload.get('key0'),null);assert.deepEqual(await reload.get('key6'),{sections:[6]});clock+=8*24*3600*1000;assert.equal(await reload.get('key6'),null);
  const opts=options({plan:async m=>JSON.stringify(task(m).sectionNumber?{blocks:[block(task(m).sectionNumber)]}:outline)});await L.build('Create an 8 page PDF',opts);let calls=0;await L.build('Create an 8 page PDF',{...opts,context:[{text:'Corrected evidence'}],plan:async m=>{calls++;return opts.plan(m);}});assert.equal(calls,9);
 });
-test('successful draft is released so an explicit regeneration can produce new content',async()=>{
+test('only confirmed successful export releases the draft for explicit regeneration',async()=>{
  let calls=0;const opts=options({plan:async m=>{calls++;return JSON.stringify(task(m).sectionNumber?{blocks:[block(task(m).sectionNumber)]}:outline);}});
- await L.build('Create an 8 page PDF',opts);await L.build('Create an 8 page PDF',opts);assert.equal(calls,18);
+ const draft=await L.build('Create an 8 page PDF',opts);await L.build('Create an 8 page PDF',opts);assert.equal(calls,9);await L.complete(draft.documentCheckpoint,opts.checkpointStore);await L.build('Create an 8 page PDF',opts);assert.equal(calls,18);
 });
 test('real incomplete NDJSON retries a section without committing partial JSON',async()=>{
  const fs=require('fs'),vm=require('vm'),source=fs.readFileSync('app.js','utf8');

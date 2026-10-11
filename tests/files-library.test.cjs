@@ -3,7 +3,7 @@ const app=fs.readFileSync('app.js','utf8'),functions=app.slice(app.indexOf('let 
 function setup(){
  const calls=[],errors=[],handlers={},nodes={};const node=id=>nodes[id]||=( {hidden:false,dataset:{},querySelector:()=>({}),addEventListener:(name,fn)=>handlers[id]=fn} );
  const state={savedChats:{},messages:[],attachments:[],deletedChats:new Set(),projects:{},filesSource:'my',filesQuery:'',currentChat:'current'};
- const ctx=vm.createContext({state,$:node,$$:()=>[],recoverMessageWidgets:()=>{},normalizedWidgetArtifacts:v=>v||[],OrbitWidgets:{filename:s=>s.filename,MIME:{text:'text/plain'}},
+ const ctx=vm.createContext({state,$:node,$$:()=>[],recoverMessageWidgets:()=>{},normalizedWidgetArtifacts:v=>v||[],widgetArtifactName:a=>a.spec.filename,OrbitWidgets:{filename:s=>s.filename,MIME:{text:'text/plain'}},
   attachmentFileKind:()=>({label:'Text',icon:'file',className:'text'}),isImageFile:()=>false,escapeHtml:v=>String(v).replaceAll('<','&lt;').replaceAll('"','&quot;'),formatFileSize:()=>'',formatFileActivity:()=>'',
   OrbitChatStore:{load:async id=>{calls.push(['disk',id]);return ctx.disk; }},OrbitPreview:{show:async source=>calls.push(['viewer',source])},showToast:value=>errors.push(value),loadChat:id=>calls.push(['chat',id]),titleForChatId:id=>id});
  vm.runInContext(functions+'\n'+app.slice(app.indexOf("$('#files-grid').addEventListener"),app.indexOf("$('#files-search-input').addEventListener")),ctx);return {ctx,state,calls,errors,nodes,handlers};

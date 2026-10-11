@@ -10,6 +10,7 @@ import http.client
 import http.server
 import os
 import socket
+import sys
 import ssl
 import threading
 import time
@@ -542,6 +543,9 @@ class OrbitHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):  # noqa: N802 - required by BaseHTTPRequestHandler
         path = self.path.split("?", 1)[0]
+        if path == '/api/health':
+            self.web_json(200, {'service': 'orbit', 'pid': os.getpid()})
+            return
         if path == '/api/voice/connectivity':
             if self.headers.get('X-Orbit-Voice') != '1':
                 self.web_json(403, {'online': False})
@@ -765,6 +769,20 @@ class TLSAwareThreadingHTTPServer(http.server.ThreadingHTTPServer):
     allow_reuse_address = True
     daemon_threads = True
 
+    def get_request(self):
+        # Never negotiate TLS on the accept thread: one silent TCP client must
+        # not block every chat, settings request and health check.
+        raw, address = self.socket.accept()
+        raw.settimeout(15)
+        context = getattr(self, 'tls_context', None)
+        if context is None:  # Plain HTTP harnesses use the server class directly.
+            return raw, address
+        try:
+            return context.wrap_socket(raw, server_side=True, do_handshake_on_connect=False), address
+        except Exception:
+            raw.close()
+            raise
+
     def shutdown_request(self, request):
         # socketserver.TCPServer normally calls socket.shutdown(SHUT_WR) for
         # every request. On an SSLSocket that can send a raw TCP half-close
@@ -802,16 +820,128 @@ class IPv6ThreadingHTTPServer(TLSAwareThreadingHTTPServer):
 
 def create_server(address, context, server_class=IPv4ThreadingHTTPServer):
     server = server_class((address, PORT), OrbitHandler)
-    server.socket = context.wrap_socket(server.socket, server_side=True)
+    server.tls_context = context
     return server
 
 
+def guard_installed_runtime(root=ROOT, port=PORT, platform=sys.platform,
+                            installed=Path('/Library/Application Support/Orbit')):
+    if platform == 'darwin' and port == 443 and (installed / 'server.py').is_file() and root.resolve() != installed.resolve():
+        raise RuntimeError('Installed Orbit owns port 443. Run development copies with ORBIT_PORT set to another port; saved API settings belong to the installed service.')
+
+
+def launchd_listeners():
+    """Retrieve listeners held by macOS across process exits; never rebind them."""
+    import ctypes
+    lib = ctypes.CDLL('/usr/lib/libSystem.B.dylib')
+    activate = lib.launch_activate_socket
+    activate.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.POINTER(ctypes.c_int)), ctypes.POINTER(ctypes.c_size_t)]
+    activate.restype = ctypes.c_int
+    lib.free.argtypes = [ctypes.c_void_p]
+    lib.free.restype = None
+    descriptors, count = ctypes.POINTER(ctypes.c_int)(), ctypes.c_size_t()
+    result = activate(b'HTTPS', ctypes.byref(descriptors), ctypes.byref(count))
+    if result:
+        raise OSError(result, 'Orbit could not acquire its macOS-managed HTTPS sockets: ' + os.strerror(result))
+    try:
+        fds = [descriptors[i] for i in range(count.value)]
+    finally:
+        lib.free(descriptors)
+    listeners = []
+    try:
+        for fd in fds:
+            listeners.append(socket.socket(fileno=fd))
+        if not listeners:
+            raise RuntimeError('macOS returned no Orbit HTTPS sockets.')
+        for listener in listeners:
+            listener.setblocking(True)
+        return listeners
+    except Exception:
+        for listener in listeners:
+            listener.close()
+        for fd in fds[len(listeners):]:
+            os.close(fd)
+        raise
+
+
+def adopt_server(listener, context):
+    # HTTPServer.__init__ allocates a placeholder; it must never bind/listen.
+    cls = IPv6ThreadingHTTPServer if listener.family == socket.AF_INET6 else IPv4ThreadingHTTPServer
+    server = cls(listener.getsockname(), OrbitHandler, bind_and_activate=False)
+    server.socket.close()
+    server.socket, server.tls_context = listener, context
+    server.server_address = listener.getsockname()
+    server.server_name, server.server_port = 'orbit.com', server.server_address[1]
+    return server
+
+
+def runtime_healthy(port=PORT, pid=None):
+    expected = os.getpid() if pid is None else pid
+    for host in ('127.0.0.1', '::1'):
+        connection = http.client.HTTPSConnection(host, port, timeout=5, context=ssl._create_unverified_context())
+        try:
+            connection.request('GET', '/api/health', headers={'Host': 'orbit.com'})
+            response = connection.getresponse()
+            body = json.loads(response.read(1024))
+            if response.status != 200 or body != {'service': 'orbit', 'pid': expected}:
+                return False
+        except (OSError, ValueError, http.client.HTTPException):
+            return False
+        finally:
+            connection.close()
+    return True
+
+
+def monitor_runtime(stop, probe=runtime_healthy, restart=None, interval=30, threshold=3):
+    failures = 0
+    while not stop.wait(interval):
+        failures = 0 if probe() else failures + 1
+        if failures >= threshold:
+            print('Orbit health checks failed repeatedly; restarting while macOS retains the HTTPS listeners.', flush=True)
+            (restart or (lambda: os._exit(1)))()
+            return
+
+
 def main():
+    guard_installed_runtime()
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(
         certfile=str(CERT_FILE),
         keyfile=str(KEY_FILE),
     )
+    servers = []
+    managed = sys.platform == 'darwin' and os.environ.get('ORBIT_LAUNCHD_SOCKETS') == '1'
+    if managed:
+        listeners = launchd_listeners()
+        try:
+            servers = [adopt_server(listener, context) for listener in listeners]
+        except Exception:
+            for listener in listeners:
+                listener.close()
+            raise
+        print('Serving Orbit using macOS-managed HTTPS listeners (IPv4 + IPv6 loopback)')
+    else:
+        servers = standalone_servers(context)
+    threads = [threading.Thread(target=server.serve_forever, name=f"orbit-server-{index}", daemon=True) for index, server in enumerate(servers)]
+    for thread in threads:
+        thread.start()
+    stop = threading.Event()
+    if managed:
+        threading.Thread(target=monitor_runtime, args=(stop,), name='orbit-health', daemon=True).start()
+    print("Ollama proxy: https://orbit.com/api/ollama/* -> http://127.0.0.1:11434/api/*")
+    try:
+        for thread in threads:
+            thread.join()
+    except KeyboardInterrupt:
+        print("\nOrbit server stopped")
+    finally:
+        stop.set()
+        for server in servers:
+            server.shutdown()
+            server.server_close()
+
+
+def standalone_servers(context):
     servers = []
     try:
         servers.append(create_server("::", context, DualStackThreadingHTTPServer))
@@ -824,19 +954,7 @@ def main():
             print("Serving Orbit with separate IPv4 and IPv6 listeners")
         except OSError as ipv6_error:
             print(f"IPv6 listener unavailable; serving IPv4 only: {ipv6_error}")
-    threads = [threading.Thread(target=server.serve_forever, name=f"orbit-server-{index}", daemon=True) for index, server in enumerate(servers)]
-    for thread in threads:
-        thread.start()
-    print("Ollama proxy: https://orbit.com/api/ollama/* -> http://127.0.0.1:11434/api/*")
-    try:
-        for thread in threads:
-            thread.join()
-    except KeyboardInterrupt:
-        print("\nOrbit server stopped")
-    finally:
-        for server in servers:
-            server.shutdown()
-            server.server_close()
+    return servers
 
 
 if __name__ == "__main__":

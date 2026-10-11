@@ -17,7 +17,7 @@ function create({name='orbit-chat-history',legacyKey='orbit-conversations-v1',in
   for(const [mi,m] of messages.entries()){
    for(const [ai,a] of (Array.isArray(m?.attachments)?m.attachments:[]).entries())if(a?.name)meta.files.push({name:a.name,type:a.type,size:a.size||0,source:a.generated?'orbit':'my',messageIndex:mi,attachmentIndex:ai,key:'attachment:'+mi+'-'+ai});
    const artifacts=Array.isArray(m?.artifacts)&&m.artifacts.length?m.artifacts:root.OrbitWidgets?.extract?.(m?.text||'')?.artifacts||[];
-   for(const [ai,a] of artifacts.entries()){const spec=a?.spec||a;if(!spec?.kind)continue;meta.files.push({name:root.OrbitWidgets?.filename(spec)||`${spec.title||'Untitled'}.${spec.kind}`,type:root.OrbitWidgets?.MIME?.[spec.kind]||'',size:a.size||0,source:'orbit',messageIndex:mi,artifactIndex:ai,artifactId:a.id||'',key:'artifact:'+(a.id||mi+'-'+ai)});}
+   for(const [ai,a] of artifacts.entries()){const spec=a?.spec||a;if(!spec?.kind)continue;let name;try{name=root.OrbitWidgets?.filename(spec);}catch(_){/* Invalid saved recipes must not prevent the entire chat from saving. */}name=name||`${String(spec.title||'Saved file').slice(0,180)}.${spec.kind}`;meta.files.push({name,type:root.OrbitWidgets?.MIME?.[spec.kind]||'',size:a.size||0,source:'orbit',messageIndex:mi,artifactIndex:ai,artifactId:a.id||'',key:'artifact:'+(a.id||mi+'-'+ai)});}
   }
   meta.files=[...new Map(meta.files.map(file=>[file.key,file])).values()];
   return meta;

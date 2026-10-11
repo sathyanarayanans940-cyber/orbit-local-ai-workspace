@@ -41,6 +41,10 @@ with tempfile.TemporaryDirectory(prefix='orbit install & update ') as temporary:
             plist = plistlib.loads(path.read_bytes())
             expected = 'orbit-dns.py' if plist['Label'] == 'com.orbit.local-dns' else 'server.py'
             assert str(install / expected) in plist['ProgramArguments']
+            if expected == 'server.py':
+                assert plist['EnvironmentVariables']['ORBIT_LAUNCHD_SOCKETS'] == '1'
+                assert plist['KeepAlive'] is True
+                assert [(s['SockFamily'], s['SockNodeName'], s['SockServiceName']) for s in plist['Sockets']['HTTPS']] == [('IPv4', '127.0.0.1', 443), ('IPv6', '::1', 443)]
         hosts = (stage / 'hosts').read_text()
         assert hosts.count('orbit.com') == 2 and 'other.test' in hosts and 'localhost' in hosts
         assert (install / 'orbit.com-key.pem').stat().st_mode & 0o777 == 0o600

@@ -585,7 +585,14 @@ cat > "$PLIST" <<PLIST_EOF
     <string>$INSTALL_ROOT_XML/system-ca.pem</string>
     <key>PYTHONUNBUFFERED</key>
     <string>1</string>
+    <key>ORBIT_LAUNCHD_SOCKETS</key>
+    <string>1</string>
   </dict>
+  <key>Sockets</key>
+  <dict><key>HTTPS</key><array>
+    <dict><key>SockFamily</key><string>IPv4</string><key>SockNodeName</key><string>127.0.0.1</string><key>SockServiceName</key><integer>443</integer><key>SockType</key><string>stream</string></dict>
+    <dict><key>SockFamily</key><string>IPv6</string><key>SockNodeName</key><string>::1</string><key>SockServiceName</key><integer>443</integer><key>SockType</key><string>stream</string></dict>
+  </array></dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -669,6 +676,8 @@ install_ollama_launch_agent
 
 CURRENT_UID="${SUDO_UID:-$(id -u)}"
 launchctl bootout "gui/$CURRENT_UID/$APP_LABEL" 2>/dev/null || true
+# An older development LaunchAgent must not reclaim HTTPS after the next login.
+launchctl disable "gui/$CURRENT_UID/$APP_LABEL" 2>/dev/null || true
 launchctl bootout "system/$APP_LABEL" 2>/dev/null || true
 launchctl bootstrap system "$PLIST"
 launchctl enable "system/$APP_LABEL"
