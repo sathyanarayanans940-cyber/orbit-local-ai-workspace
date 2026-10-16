@@ -56,6 +56,7 @@ test('overflow tables preserve final content, continuation styling and actual sl
  const xml=await Promise.all(files.map(p=>zip.file(p).async('string')));
  assert.match(xml.join('').replace(/<[^>]+>/g,''),/Row 9/);assert.match(xml[1],/continued/);assert.match(xml[1],/102D3A/);
  xml.forEach((s,i)=>assert.ok(s.includes('<a:t>'+String(i+1).padStart(2,'0')+'</a:t>')));
+ require('node:fs').mkdirSync('tests/output/document-vision',{recursive:true});
  require('node:fs').writeFileSync('tests/output/document-vision/modern-overflow.pptx',Buffer.from(await blob.arrayBuffer()));
 });
 test('multiline cylinder labels reserve room for their elliptical caps',()=>{

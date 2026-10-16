@@ -53,7 +53,7 @@ test('lazy engine resolves from the script URL and can recover from a failed or 
  const vm=require('node:vm'),fs=require('node:fs');
  const scripts=[];const ctx={URL,OrbitArchives:{},document:{currentScript:{src:'https://orbit.example/widgets.js?v=58'},createElement:()=>({remove(){}}),head:{appendChild(script){scripts.push(script);}}}};
  vm.createContext(ctx);vm.runInContext(fs.readFileSync('widgets.js','utf8'),ctx);
- let pending=ctx.OrbitWidgets.engine();assert.equal(scripts[0].src,'https://orbit.example/vendor/widgets/engine.js?v=28');scripts[0].onerror();await assert.rejects(pending,/could not load/);
+ let pending=ctx.OrbitWidgets.engine();assert.equal(scripts[0].src,'https://orbit.example/vendor/widgets/engine.js?v=30');scripts[0].onerror();await assert.rejects(pending,/could not load/);
  pending=ctx.OrbitWidgets.engine();scripts[1].onload();await assert.rejects(pending,/could not load/);
  pending=ctx.OrbitWidgets.engine();ctx.OrbitWidgetEngine={generate(){},rasterizeSvg(){}};scripts[2].onload();assert.equal(await pending,ctx.OrbitWidgetEngine);
 });

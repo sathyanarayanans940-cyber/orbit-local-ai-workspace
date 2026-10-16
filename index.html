@@ -2,14 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f6f6f6" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="theme-color" content="#161616" />
+    <meta name="color-scheme" content="light dark" />
+    <script src="pwa-appearance.js?v=1"></script>
     <meta name="description" content="A private local AI workspace for Ollama and LM Studio." />
     <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="icon.svg?v=2" type="image/svg+xml" />
     <link rel="stylesheet" href="vendor/katex/katex.min.css" />
     <title>Orbit</title>
-    <link rel="stylesheet" href="styles.css?v=203" />
+    <link rel="stylesheet" href="styles.css?v=209" />
+    <link rel="stylesheet" href="mobile.css?v=2" />
   </head>
   <body>
     <svg class="svg-sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -343,6 +346,7 @@
               <button class="settings-nav-item" type="button" data-settings-section="font" aria-selected="false">Font</button>
               <button class="settings-nav-item" type="button" data-settings-section="code" aria-selected="false">Code</button>
               <button class="settings-nav-item" type="button" data-settings-section="chat" aria-selected="false">Chat</button>
+              <button class="settings-nav-item" type="button" data-settings-section="custom" aria-selected="false">Custom</button>
             </nav>
             <div class="settings-panels">
               <section class="settings-panel" data-settings-panel="models" hidden>
@@ -472,6 +476,20 @@
                   </div>
                 </div>
                 <button class="settings-reset-button" id="reset-appearance-settings" type="button">Reset appearance defaults</button>
+              </section>
+              <section class="settings-panel" data-settings-panel="custom" hidden>
+                <div class="custom-section-heading"><div><h3>Make Orbit yours</h3><p class="settings-panel-description">Pick any colors. Save a palette you can come back to.</p></div><label class="custom-enable"><input type="checkbox" id="custom-enabled" role="switch" /><span>Custom colors</span></label></div>
+                <p class="settings-field-hint custom-override-note" id="custom-override-note" hidden>Custom colors override Appearance, Code colors and Chat accents. Switch this off to restore your regular settings. Fonts and layout stay under their usual controls.</p>
+                <div class="custom-theme-preview" id="custom-theme-preview" aria-label="Custom color preview">
+                  <aside><strong>orbit</strong><span class="custom-preview-new">＋ New chat</span><span>Conversations</span><span>My workspace</span></aside>
+                  <div class="custom-preview-chat"><span class="custom-preview-bubble">A space that feels like me.</span><p>Here’s your new palette. <span class="custom-preview-dot" aria-label="Generating dot preview"></span></p><pre><span class="custom-preview-keyword">const</span> theme = <span class="custom-preview-string">"yours"</span>;<br><span class="custom-preview-comment">// Make it your own</span></pre><div class="custom-preview-composer">Message Orbit… <span>↑</span></div></div>
+                </div>
+                <div class="custom-preset-bar"><label for="custom-presets">Saved presets</label><div class="custom-preset-actions"><select id="custom-presets" aria-label="Saved color presets"></select><button class="preferences-button secondary" id="custom-load-preset" type="button" disabled>Load</button><button class="preferences-button secondary" id="custom-delete-preset" type="button" disabled>Delete</button></div></div>
+                <div class="custom-color-grid" id="custom-colors"></div>
+                <p class="settings-field-hint" id="custom-contrast" role="status"></p>
+                <div class="custom-preset-actions"><button class="preferences-button secondary" id="custom-readable" type="button">Improve readability</button><button class="preferences-button secondary" id="custom-reset" type="button">Reset palette</button></div>
+                <div class="custom-save-preset"><label for="custom-preset-name">Save these colors as a preset</label><div class="custom-preset-actions"><input id="custom-preset-name" type="text" maxlength="40" placeholder="e.g. Midnight blue" /><button class="preferences-button secondary" id="custom-save-preset" type="button">Save preset</button></div><p class="settings-field-hint">Use an existing name to replace that preset. Presets are saved in this browser.</p></div>
+                <p class="settings-field-hint" id="custom-status" role="status" aria-live="polite"></p>
               </section>
               <section class="settings-panel" data-settings-panel="font" hidden>
                 <h3>Font</h3>
@@ -633,21 +651,22 @@
     </div>
     <div class="toast" id="toast" role="status"></div>
     <script src="vendor/katex/katex.min.js"></script>
-    <script src="charts.js?v=3"></script>
+    <script src="charts.js?v=4"></script>
     <script src="archives.js?v=2"></script>
     <script src="document-format.js?v=1"></script>
-    <script src="widgets.js?v=64"></script>
+    <script src="widgets.js?v=68"></script>
     <script src="web-tools.js?v=15"></script>
-    <script src="widgets-ui.js?v=45"></script>
+    <script src="widgets-ui.js?v=47"></script>
     <script src="thinking.js?v=11"></script>
     <script src="voice.js?v=1"></script>
     <script src="usage.js?v=4"></script>
     <script src="document-assets.js?v=9"></script>
     <script src="document-edits.js?v=3"></script>
-    <script src="long-documents.js?v=19"></script>
+    <script src="long-documents.js?v=27"></script>
     <script src="analyze.js?v=14"></script>
     <script src="memories.js?v=10"></script>
     <script src="chat-store.js?v=7"></script>
-    <script src="boot.js?v=72"></script>
+    <script src="custom-theme.js?v=2"></script>
+    <script src="boot.js?v=78"></script>
   </body>
 </html>

@@ -10,9 +10,10 @@
     await load('workspace-core.js?v=2');
     await load('workspace-budget.js?v=2');
     await load('document-history.js?v=1');
-    await load('app.js?v=262');
-    await load('file-preview.js?v=26');
+    await load('app.js?v=267');
+    await load('file-preview.js?v=28');
     await load('workspace-tools.js?v=4');
+    await load('mobile.js?v=1');
     initWidgetUi();
   } catch (error) {
     const notice = document.createElement('div');

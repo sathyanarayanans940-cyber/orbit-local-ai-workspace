@@ -376,7 +376,7 @@ test('document retry identity uses original uploads, not changing vision notes o
 });
 
 
-test('DeepSeek survives queued keepalives then private thought and split Unicode answer',async()=>{
+test('DeepSeek survives a bounded queue then long active reasoning and split Unicode answer',async()=>{
  const r=runtime('DeepSeek');const statuses=[],tokens=[];
  r.context.state.models[0].id='deepseek-flash';
  vm.runInContext(fs.readFileSync(require.resolve('../thinking.js'),'utf8'),r.context);
@@ -388,12 +388,61 @@ test('DeepSeek survives queued keepalives then private thought and split Unicode
  assert.equal(r.request().body.reasoning_effort,'high');
  assert.equal(r.request().body.max_tokens,65536);
  assert.equal(r.request().body.temperature,undefined);
- for(let i=0;i<7;i++){r.tick(90000);r.raw(': keep-alive\n\n');await flush();}
- r.send({choices:[{delta:{reasoning_content:'private work'}}]});await flush();
+ r.tick(90000);r.raw(': keep-alive\n\n');await flush();
+ for(let i=0;i<7;i++){r.tick(80000);r.send({choices:[{delta:{reasoning_content:'private work'}}]});await flush();}
  r.bytes('data: {"choices":[{"delta":{"content":"Verified 🧪"}}]}\n\n');
  r.raw('data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"total_tokens":200}}\n\n');r.close();
  assert.equal((await reply).text,'Verified 🧪');assert.deepEqual(tokens,['Verified 🧪']);assert.ok(statuses.includes('Thinking'));
  assert.equal(r.timers.size,0);
+});
+test('heartbeats, usage, empty tokens and role packets cannot keep stalled DeepSeek alive forever',async()=>{
+ for(const provider of ['DeepSeek']){
+  for(const mode of ['heartbeat','empty']){
+   const r=runtime(provider);r.context.runtimeEndpoints[provider]??={chat:'/synthetic'};let calls=0;
+   const fetch=r.context.fetch;r.context.fetch=(...a)=>{calls++;return fetch(...a);};
+   const pending=r.context.requestLocalReply('Explain',[],{});
+   const failure=assert.rejects(pending,error=>error.providerStalled===true&&error.retryable===false&&/three minutes/.test(error.message));await flush();
+   for(let i=0;i<6;i++){
+    r.tick(29000);
+    if(mode==='heartbeat'&&provider!=='Ollama')r.raw(': keep-alive\n\n');
+    else r.send(provider==='Ollama'?{message:{role:'assistant',content:'   '}}:{choices:[{delta:{role:'assistant',content:'   '}}],usage:{total_tokens:1}});
+    await flush();
+   }
+   r.tick(6001);await failure;assert.equal(calls,1,provider);assert.equal(r.timers.size,0,provider);
+  }
+ }
+});
+test('a provider that stalls after partial output preserves text and closes without automatic replay',async()=>{
+ const r=runtime('DeepSeek'),tokens=[];let cancelled=0,calls=0;
+ const fetch=r.context.fetch;r.context.fetch=async(...a)=>{calls++;const response=await fetch(...a);const reader=response.body.getReader();return {...response,body:{getReader:()=>({read:()=>reader.read(),cancel:()=>{cancelled++;return reader.cancel();},releaseLock:()=>reader.releaseLock()})}};};
+ const pending=r.context.requestLocalReply('Explain',[],{onToken:t=>tokens.push(t)});
+ const failure=assert.rejects(pending,error=>error.providerStalled===true);await flush();
+ r.send({choices:[{delta:{content:'Keep this exact partial answer.'}}]});await flush();
+ for(let i=0;i<3;i++){r.tick(59000);r.raw(': still connected\n\n');await flush();}
+ r.tick(3001);await failure;assert.equal(tokens.join(''),'Keep this exact partial answer.');assert.equal(calls,1);assert.equal(cancelled,1);assert.equal(r.timers.size,0);
+});
+test('DeepSeek silence without even a heartbeat stops once instead of starting a long document retry loop',async()=>{
+ const r=runtime('DeepSeek');let calls=0;const fetch=r.context.fetch;r.context.fetch=(...a)=>{calls++;return fetch(...a);};
+ const pending=r.context.requestLocalReply('Draft assigned section',[],{drafting:true});
+ const failure=assert.rejects(pending,error=>error.providerStalled===true&&error.retryable===false);await flush();r.tick(120001);await failure;assert.equal(calls,1);assert.equal(r.timers.size,0);
+});
+test('DeepSeek header silence is also non-retryable and clears its connection timer',async()=>{
+ const r=runtime('DeepSeek');let calls=0;
+ r.context.fetch=(url,{signal})=>{calls++;return new Promise((_,reject)=>signal.addEventListener('abort',()=>reject(new DOMException('Stopped','AbortError')),{once:true}));};
+ const pending=r.context.requestLocalReply('Draft assigned section',[],{drafting:true});
+ const failure=assert.rejects(pending,error=>error.providerStalled===true&&error.retryable===false&&/two minutes/.test(error.message));await flush();r.tick(120001);await failure;assert.equal(calls,1);assert.equal(r.timers.size,0);
+});
+test('explicit document routing selects tools quickly while retaining research, complete scope and section progress',async()=>{
+ const r=runtime('DeepSeek'),L=require('../long-documents.js'),statuses=[],started=[];
+ r.context.state.models[0].id='deepseek-flash';vm.runInContext(fs.readFileSync(require.resolve('../thinking.js'),'utf8'),r.context);
+ r.context.OrbitWidgets={...require('../widgets.js')};r.context.OrbitDocuments={instruction:()=>'',catalog:()=>[]};
+ r.context.OrbitWeb={research:async()=>{started.push('web');return {required:true,retrievedSources:[{url:'https://example.com/primary',title:'Primary',content:'Relevant source evidence'}],sources:[]};}};
+ r.context.OrbitLongDocuments={...L,build:async(request,options)=>{started.push('document');assert.equal(options.scope.count,12);assert.equal(options.research[0].content,'Relevant source evidence');assert.equal(options.researchRequired,true);assert.match(request,/with diagrams/);options.onStatus('Writing 1/8: Background');return {text:'Validated complete PDF recipe'};}};
+ const prompt='Make a 12 page PDF on a current conflict, with diagrams';
+ const pending=r.context.requestLocalReply(prompt,[{role:'user',text:prompt}],{widgets:true,onStatus:t=>statuses.push(t)});await flush();
+ assert.equal(r.request().body.thinking.type,'disabled');assert.equal(r.request().body.response_format,undefined);assert.match(r.request().body.messages[0].content,/document-tool selection stage only/);assert.match(r.request().body.messages[0].content,/research or calculations when useful/);assert.equal(statuses.at(-1),'Selecting document tools');
+ r.send({choices:[{delta:{content:'<orbit-tools>{"steps":[["web"]],"files":true}</orbit-tools>'},finish_reason:'stop'}]});r.close();
+ assert.equal((await pending).text,'Validated complete PDF recipe');assert.deepEqual(started,['web','document']);assert.equal(statuses.at(-1),'Writing 1/8: Background');assert.equal(r.timers.size,0);
 });
 test('DeepSeek document planning uses JSON without unsupported local token sentinels',async()=>{
  const r=runtime('DeepSeek');r.context.state.models[0].id='deepseek-flash';

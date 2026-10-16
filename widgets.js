@@ -1,13 +1,13 @@
 /* Declarative local tools. Model output is data, never executable code. */
 (function (root) {
   'use strict';
-  const presentationThemes = Object.freeze({"midnight": "ink / violet", "paper": "cream / rust", "ocean": "navy / teal", "coral": "plum / coral", "forest": "pine / fern", "ember": "charcoal / terracotta", "cobalt": "deep blue / electric blue", "lavender": "aubergine / lilac", "sandstone": "earth / ochre", "cherry": "burgundy / rose", "arctic": "polar navy / glacier", "olive": "ink / botanical gold", "graphite": "carbon / silver", "espresso": "coffee / caramel"});
+  const presentationThemes = Object.freeze({"midnight": "ink / violet", "paper": "cream / rust", "ocean": "navy / teal", "coral": "plum / coral", "forest": "pine / fern", "ember": "charcoal / terracotta", "cobalt": "deep blue / electric blue", "lavender": "aubergine / lilac", "sandstone": "earth / ochre", "cherry": "burgundy / rose", "arctic": "polar navy / glacier", "olive": "ink / botanical gold", "graphite": "carbon / silver", "espresso": "coffee / caramel", "porcelain": "warm white / ink", "blueprint": "drafting navy / azure", "sage": "soft sage / eucalyptus", "aurora": "deep teal / mint", "goldleaf": "obsidian / antique gold", "orchid": "blackberry / orchid", "vermilion": "warm charcoal / vermilion", "slate": "slate navy / steel blue"});
   const KINDS = ['pdf', 'docx', 'pptx', 'xlsx', 'chart', 'diagram', 'text', 'ipynb', 'zip'];
   const archives = root.OrbitArchives || (typeof require === 'function' ? require('./archives.js') : null);
   const documentFormat = root.OrbitDocumentFormat || (typeof require === 'function' ? require('./document-format.js') : null);
   const MIME = { text:'text/plain;charset=utf-8', diagram: 'image/svg+xml', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', chart: 'image/svg+xml' };
   const SETTINGS_KEY = 'orbit-widgets-v1';
-  const engineUrl=root.document?.currentScript?.src?new URL('./vendor/widgets/engine.js?v=28',root.document.currentScript.src).href:'./vendor/widgets/engine.js?v=28';
+  const engineUrl=root.document?.currentScript?.src?new URL('./vendor/widgets/engine.js?v=30',root.document.currentScript.src).href:'./vendor/widgets/engine.js?v=30';
   const charts = root.OrbitCharts || (typeof require === 'function' ? require('./charts.js') : null);
   const escape = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const sourceExtensions = 'txt text md markdown rst tex log csv tsv json jsonl ndjson yaml yml toml ini cfg conf env xml html htm css scss sass less svg js mjs cjs jsx ts tsx py pyi r R c h cc cpp cxx hpp hxx cs java kt kts scala go rs swift m mm php rb pl pm lua sh bash zsh fish ps1 bat cmd sql graphql gql proto vue svelte ipynb asm s f f90 f95 for lisp clj cljs ex exs erl hrl hs lhs ml mli fs fsx vb vbs dart jl nim pas rkt groovy gradle cmake make dockerfile properties gitignore editorconfig lock diff patch'.split(' ');
@@ -165,7 +165,7 @@
     if(!value || !['diagram','chart'].includes(value.kind))throw new Error('Embedded visuals must be an Orbit diagram/chart recipe: visual:{kind:"diagram",title:"...",width:1000,height:600,nodes:[...],edges:[...]}, or visual:{kind:"chart",chartType:"bar",labels:[...],series:[...]}, or an existing artifactId.');
     try{return normalize(value);}catch(error){
       if(!fitLayout || value.kind!=='diagram' || !/overlap|does not fit|attributes do not fit|group.*(outside|too wide)/.test(error.message))throw error;
-      // Embedded slide diagrams may need more room after wrapping. Expand the
+      // Embedded document/slide diagrams may need more room after wrapping. Expand the
       // coordinate system uniformly; never drop nodes, edges, groups or labels.
       // Standalone algorithm snapshots keep their strict, stable coordinates.
       const nodes=value.nodes.map(n=>{
@@ -204,13 +204,15 @@
     if(spec.slides)spec.slides=spec.slides.map(slide=>slide.visual?{...slide,visual:resolve(slide.visual)}:slide);
     return spec;
   }
-  async function prepareVisuals(spec) {
+  async function prepareVisuals(spec,cache) {
     const visuals={};
     const entries=(spec.blocks||spec.slides||[]).map((item,index)=>({item,index})).filter(({item})=>item.visual);
     for(const {item,index} of entries){
       const svg=visualSvg(item.visual),view=svg.match(/viewBox="([^"]+)"/)[1].split(/\s+/).map(Number),width=view[2],height=view[3];
       const label=`${spec.slides?'Slide':'Block'} ${index+1} — ${item.visual.title}`;
-      visuals[index]=await (await engine()).rasterizeSvg(svg,width,height,{label});
+      let rendered=cache?.get(svg);
+      if(!rendered){rendered=await (await engine()).rasterizeSvg(svg,width,height,{label});cache?.set(svg,rendered);}
+      visuals[index]=rendered;
     }
     return visuals;
   }
@@ -253,7 +255,7 @@
       if (b.type === 'divider') return {type:'divider'};
       if (b.type === 'callout') return {type:'callout',text:richText(b.text),title:text(b.title||'',120),tone:['info','success','warning'].includes(b.tone)?b.tone:'info'};
       if (b.type === 'image') return imageBlock(b);
-      if (b.type === 'visual') return {type:'visual',visual:visualSpec(b.visual),caption:text(b.caption||'',1200),widthPercent:Math.max(20,Math.min(100,Number(b.widthPercent)||100))};
+      if (b.type === 'visual') return {type:'visual',visual:visualSpec(b.visual,true),caption:text(b.caption||'',1200),widthPercent:Math.max(20,Math.min(100,Number(b.widthPercent)||100))};
       if (b.type === 'code') {
         let source=text(b.text,60000);
         // Some models encode the entire source string twice. Decode one JSON
@@ -516,7 +518,7 @@ Images: PDF/Word support {"type":"image","assetId":"img-ID from supplied catalog
 PowerPoint: {"kind":"pptx","title":"Deck title","slides":[{"title":"Slide title","bullets":["Concise point"],"notes":"Detailed speaker notes"}]}. Maximum 40 slides, 6 bullets per slide, 240 characters per bullet; split long content across slides. A slide may instead have "table":{"headers":["Topic","Result"],"rows":[["A","12"]]}, at most 8 columns and 10 rows; table slides allow up to 2 bullets. Use fewer rows/columns for long cells; overflow tables paginate onto extra slides.
 Formatting: paragraph/heading text, bullet items and table cells may be plain strings OR arrays of styled runs such as [{"text":"Important","bold":true,"underline":true,"color":"2457A6"},{"text":" explanation"}]. Bold, italic, underline and six-digit hex color are supported; DOCX runs additionally support font family names and size in points. Use restrained colors, selective underlining, headings and useful tables appropriate to the request, not decoration everywhere. Document titles and slide titles remain plain strings.
 Code in PDF/Word MUST use {"type":"code","language":"cpp","text":"source code with escaped newline characters"}. Preserve every source line, indentation, blank line, quote and backslash; never collapse code into a prose paragraph. Use level 1 for main headings and level 2 for subsections. Before the tool say "I’ll prepare the document" rather than "I created it". Do not announce completion yourself: Orbit displays confirmation only after the file is generated successfully.
-Length: match the requested depth. A substantial report or study guide can contain 16–19 pages of developed content, examples and tables when useful, not just an outline. Do not shorten a requested long document to a one-page summary. PDF/Word tables accept up to 26 columns; wide tables split into readable panels with the first column repeated. Prefer observations as rows and variables as columns. For PDF/Word, let developed paragraphs and sections flow continuously across pages. Page count means substantive content, not one short section per forced page. Reserve pageBreak for an explicitly requested separate cover or appendix, never to inflate length. A long research-style report usually needs roughly 450–550 words per text page, with explained figures mixed into that flow. Final page count varies with layout; do not guarantee an exact count. Avoid empty pages, repeated filler and padding. For presentations honor the requested slide count and put detailed explanation in notes. Keep only the chat introduction short, not the file content. Complete every JSON object and fence. Maximum 480000 characters per tool.
+Length: match the requested depth. Treat the requested page count as a space budget shared by prose, figures, tables and references; choose content accordingly. Do not shorten a requested long document to a one-page summary. PDF/Word tables accept up to 26 columns; wide tables split into readable panels with the first column repeated. Prefer observations as rows and variables as columns. For PDF/Word, let developed paragraphs and sections flow continuously across pages. Page count means substantive content, not one short section per forced page. Reserve pageBreak for an explicitly requested separate cover or appendix, never to inflate length. Use the assigned word limits when supplied. Reserve space for diagrams and references before allocating prose. Prefer a few informative figures over redundant ones. Final pagination is measured during PDF export; do not claim an exact count yourself. Avoid empty pages, repeated filler and padding. For presentations honor the requested slide count and put detailed explanation in notes. Keep only the chat introduction short, not the file content. Complete every JSON object and fence. Maximum 480000 characters per tool.
 Charts: supported types are bar, line, area, pie, doughnut, scatter, curve, box, gantt, horizontal-bar, stacked-bar, percent-bar, stacked-area, step, histogram, heatmap, bubble, waterfall, radar, funnel, treemap. Choose by the relationship in the data, not decoration. Each example below is a complete valid schema. Do not mix their data formats.
 Categorical example: {"kind":"chart","title":"Comparison","chartType":"bar","labels":["A","B"],"series":[{"name":"Values","values":[12,20]}],"unit":""}. line and area use the same schema. pie/doughnut need one nonnegative series with positive total. Maximum 40 labels and 5 series.
 Scatter example: {"kind":"chart","title":"Study time vs marks (sample data)","chartType":"scatter","x":[1,2,3,4],"xLabel":"Hours studied","unit":"Exam marks","series":[{"name":"Students","values":[45,60,72,85]}]}. REQUIRED: x is an array of numeric X coordinates; series values are matching numeric Y coordinates, NOT objects. Do not omit x or replace it with categorical labels. Maximum 200 paired points per series. Use curve with this same schema for smooth sampled functions; curve x must strictly increase. Scatter x may repeat or be unsorted.
@@ -1268,7 +1270,8 @@ Use only enabled kinds. If a requested kind is absent from Enabled kinds, explai
         drawing += `<rect x="${legendX}" y="422" width="10" height="10" fill="${colors[i]}"/><text x="${legendX + 16}" y="432"><title>${escape(s.name)}</title>${escape(legendName)}</text>`;
       });
     }
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${escape(spec.title)}"><rect width="800" height="480" rx="16" fill="#fff"/><g font-family="Arial, sans-serif" font-size="13" fill="#283243"><text x="36" y="40" font-size="22" font-weight="bold">${escape(spec.title.slice(0,58))}</text><text x="36" y="65" fill="#697386">${escape(spec.unit)}</text>${drawing}</g></svg>`;
+    const titles=charts?.titleLines?charts.titleLines(spec.title):diagramLines(spec.title,/[MW]|[^\u0000-\u024f]/.test(spec.title)?26:44),offset=(titles.length-1)*28,height=h+offset;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${height}" width="${w}" height="${height}" role="img" aria-label="${escape(spec.title)}"><title>${escape(spec.title)}</title><rect width="800" height="${height}" rx="16" fill="#fff"/><g font-family="Arial, sans-serif" font-size="13" fill="#283243">${titles.map((line,i)=>`<text x="36" y="${40+i*28}" font-size="22" font-weight="bold">${escape(line)}</text>`).join('')}<text x="36" y="${65+offset}" fill="#697386">${escape(spec.unit)}</text><g transform="translate(0,${offset})">${drawing}</g></g></svg>`;
   }
   function diagramInlineSvg(spec) {
     const svg=diagramSvg(spec);
@@ -1304,7 +1307,7 @@ Use only enabled kinds. If a requested kind is absent from Enabled kinds, explai
     if(spec.kind==='ipynb')return new Blob([JSON.stringify(spec.notebook,null,2)+'\n'],{type:'application/x-ipynb+json'});
     if(spec.kind==='diagram') return new Blob([diagramSvg(spec,{standalone:true})], {type:MIME.diagram});
     if(spec.kind==='chart') return new Blob([chartSvg(spec)], {type:MIME.chart});
-    const visuals=await prepareVisuals(spec);
+    const visuals=await prepareVisuals(spec,options.visualCache);
     return (await engine()).generate(spec,{...options,visuals});
   }
   function chartData(spec){

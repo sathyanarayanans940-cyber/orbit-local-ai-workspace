@@ -220,6 +220,8 @@ ASSETS=(
   usage.js
   widgets-ui.js
   icon.svg
+  pwa-appearance.js
+  custom-theme.js
   index.html
   manifest.webmanifest
   server.py
@@ -228,7 +230,7 @@ ASSETS=(
   aicredits.py
   orbit-dns.py
   service-worker.js
-  styles.css
+  styles.css mobile.css mobile.js
   orbit-ollama-start-macos.sh
 )
 

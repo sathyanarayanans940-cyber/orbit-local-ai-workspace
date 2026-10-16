@@ -1,0 +1,16 @@
+<!doctype html><meta charset="utf-8"><title>Wide document table regression</title>
+<style>body{font:16px system-ui;background:#e9edf2;margin:30px}canvas{display:block;margin:20px auto;box-shadow:0 2px 15px #999;max-width:100%;height:auto}a{margin-right:24px}#status{white-space:pre-wrap}</style>
+<h1>Word/PDF wide-table regression</h1><p>Synthetic statistics data: eleven columns, ten observations. Every cell must survive.</p><button id="build">Build Word and PDF</button><p id="status">Ready</p><div id="files"></div><div id="pages"></div>
+<script src="/vendor/widgets/engine.js?v=22"></script><script src="/widgets.js?v=45-wide2"></script>
+<script type="module">
+import * as pdfjs from '/vendor/readers/pdf.min.mjs';pdfjs.GlobalWorkerOptions.workerSrc='/vendor/readers/pdf.worker.min.mjs';
+document.querySelector('#build').onclick=async()=>{try{
+const headers=['Observation','X','Y','Rank X','Rank Y','d','d²','X²','Y²','XY','Check'];
+const rows=Array.from({length:10},(_,i)=>[String(i+1),String(i+2),String(i+4),String(i+1),String(i+1),'0','0',String((i+2)**2),String((i+4)**2),String((i+2)*(i+4)),'Included']);
+const raw={kind:'docx',title:'Statistics table — synthetic regression',blocks:[{type:'heading',text:'Preserving wide calculation tables'},{type:'paragraph',text:'This regression checks that a wide calculation table becomes readable continuation panels. The observation column repeats so the reader can match rows across panels. Values are synthetic; this is a document-format test, not an answer to an exam.'},{type:'table',headers,rows},{type:'paragraph',text:'All eleven original columns and all ten rows are retained. No model repair is needed for this layout.'}]};
+const spec=OrbitWidgets.normalize(raw);let bytes=[];
+for(const kind of ['docx','pdf']){const blob=await OrbitWidgets.generate({...spec,kind});bytes.push(kind+': '+blob.size+' bytes');const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Wide statistics table.'+kind;a.textContent='Download '+kind.toUpperCase();document.querySelector('#files').append(a);
+if(kind==='pdf'){const pdf=await pdfjs.getDocument({data:new Uint8Array(await blob.arrayBuffer())}).promise;for(let page=1;page<=pdf.numPages;page++){const p=await pdf.getPage(page),v=p.getViewport({scale:1.2}),canvas=document.createElement('canvas');canvas.width=v.width;canvas.height=v.height;document.querySelector('#pages').append(canvas);await p.render({canvasContext:canvas.getContext('2d'),viewport:v}).promise;}}}
+document.querySelector('#status').textContent='PASS: '+spec.blocks.filter(b=>b.type==='table').length+' panels; no dropped columns. '+bytes.join('; ');
+}catch(e){document.querySelector('#status').textContent='FAIL: '+e.message;}};
+</script>

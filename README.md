@@ -4,15 +4,15 @@ Personal software project: a **local AI workspace for LM Studio and Ollama**, wi
 
 **Status:** actively developed prototype. Features and regression tests are included; this portfolio snapshot does not establish production readiness or reliable output from every model. Generated content depends on the selected model.
 
-## Latest update — 11 October 2026
+## Latest update — 16 October 2026
 
-macOS now holds Orbit’s IPv4 and IPv6 HTTPS listeners through launchd, keeping them reserved across server crashes and restarts. Health checks trigger recovery after repeated local failures, silent TLS connections cannot block the accept loop, and development copies cannot take the installed service’s port. Fresh installs include this configuration; existing installations need the full updater, without `--web-only`.
+Orbit now includes 22 PowerPoint palettes, with Porcelain, Blueprint, Sage, Aurora, Goldleaf, Orchid, Vermilion and Slate available by name. Preview and native PPTX colors are checked across light, dark and accent slides.
 
-Saved document recipes that fail current validation remain recoverable through **Repair file**. Completed long-document drafts survive failed exports and reloads until the files and chat save succeed. Document sections receive content-based length allocations, relevant source bodies can be selected and expanded during drafting, and the binary cache uses access-based eviction. Page counts remain estimates, and model output still requires validation.
+This update also adds custom appearance presets, improved PWA appearance, mobile layouts and readable phone diagram controls. Long-document generation handles additional malformed JSON and missing-visual cases, preserves completed sections for recovery, and checks rendered PDF pagination for overflow and underflow when a page target is requested. Output still depends on model responses and document layout; these safeguards do not guarantee every request succeeds.
 
-Validation: **821 Node tests passed**. The Python suite ran 139 tests successfully (125 passed, 14 skipped); the final focused runtime suite passed 6 tests, including an additional updater migration check. An isolated macOS service recovered from two forced crashes while competing port binds were rejected. Packaged installer checks passed fresh install, reinstall, certificate recovery, asset parity and live IPv4/IPv6 HTTPS serving. These checks do not guarantee uninterrupted service through power loss, OS failure or an administrator disabling the service.
+Validation: **884 Node tests passed** from a fresh source checkout.
 
-Run `npm ci` followed by `npm test`. Python regression tests are under `tests/`; some platform-specific checks require macOS and a desktop launchd session.
+Run `npm ci` followed by `npm test`. Browser fixtures are under `tests/`; platform-specific runtime checks may require macOS. This update contains only the local Orbit application; the separately hosted Lunivilo project is excluded.
 
 ## What to inspect
 

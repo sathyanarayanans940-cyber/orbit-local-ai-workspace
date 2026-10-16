@@ -8,6 +8,7 @@ function harness(reply='Statistics and Probability'){
   requestLocalReply:async(prompt,messages,options)=>{requested={prompt,messages,options};return {text:reply};},
   isArchivedChat:chat=>Boolean(chat?.archived),persistChats:()=>persisted++,renderConversationTitle:()=>rendered++,renderSavedHistory:()=>history++});
  vm.runInContext(source.slice(source.indexOf('const TITLE_WORD_LIMIT ='),source.indexOf('function renderConversationTitle(')),context);
+ vm.runInContext(source.slice(source.indexOf('function replyFailureText('),source.indexOf('async function requestRuntime(')),context);
  vm.runInContext(source.slice(source.indexOf('async function requestGeneratedTitle('),source.indexOf('async function sendPrompt(')),context);
  vm.runInContext(source.slice(source.indexOf('function persistCurrentChat('),source.indexOf('\nconst ',source.indexOf('function persistCurrentChat('))),context);
  return {context,timers,request:()=>requested,counts:()=>({persisted,rendered,history})};

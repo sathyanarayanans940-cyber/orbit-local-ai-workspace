@@ -120,7 +120,7 @@ test('multiple generated diagrams on one report page are counted, not deduplicat
  let calls=0;const diagram={kind:'diagram',title:'One',nodes:[{id:'a',label:'A',x:100,y:100}],edges:[]};
  await assert.rejects(L.build('Create an 8 page PDF with two diagrams in the first section',{model:{},context:[],assets:{images:[],visuals:[]},instruction:'',normalize:W.normalize,plan:async()=>{
   calls++;return JSON.stringify(calls===1?{title:'Two diagrams',sections:Array.from({length:8},(_,i)=>({title:'Section '+i,brief:'Explain',generatedVisuals:i===0?['diagram','diagram']:[]}))}:{blocks:[{type:'visual',visual:diagram}]});
- }}),/new visuals: diagram/);assert.equal(calls,4);
+ }}),/new visuals: diagram/);assert.equal(calls,5);
 });
 test('direct images with identical filenames expose distinct IDs to the model',()=>{
  const fs=require('node:fs'),vm=require('node:vm'),source=fs.readFileSync('app.js','utf8');const code=source.slice(source.indexOf('function modelTextForMessage('),source.indexOf('async function requestLocalReply('));

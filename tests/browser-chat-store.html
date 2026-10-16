@@ -1,0 +1,6 @@
+<!doctype html><meta charset="utf-8"><title>Orbit storage regression tests</title>
+<style>body{background:#171717;color:#eee;font:16px system-ui;padding:30px;line-height:1.6}pre{white-space:pre-wrap}button{padding:12px}</style>
+<h1>Storage and memory stress tests</h1><p>Synthetic test databases only. No model calls or existing chats are used.</p><button id="run">Run tests</button><pre id="results">Ready</pre>
+<script>window.addEventListener('error',e=>document.querySelector('#results').textContent='Script error: '+e.message);window.addEventListener('unhandledrejection',e=>document.querySelector('#results').textContent+='\nUnhandled: '+e.reason);</script>
+<script src="/chat-store.js?v=2"></script><script src="/memories.js?v=5"></script>
+<script src="/tests/browser-chat-store.js"></script>

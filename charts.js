@@ -5,6 +5,17 @@
   const categorical=['horizontal-bar','stacked-bar','percent-bar','stacked-area','step','waterfall','radar','funnel'];
   const colors=['#5276e8','#18a89b','#ec9862','#a075d4','#de6b96'];
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function titleLines(title){
+    const segmenter=typeof Intl.Segmenter==='function'?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
+    const characters=s=>segmenter?Array.from(segmenter.segment(s),p=>p.segment):Array.from(s);
+    const limit=/[MW]|[^\u0000-\u024f]/.test(title)?26:44,lines=[];let line='';
+    for(const word of String(title).trim().split(/\s+/)){
+      if(line&&characters(line+' '+word).length>limit){lines.push(line);line='';}
+      const letters=characters(word);while(letters.length>limit){lines.push(letters.splice(0,limit).join(''));}
+      if(letters.length)line+=(line?' ':'')+letters.join('');
+    }
+    if(line||!lines.length)lines.push(line);return lines;
+  }
   const number=v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=1e12;
   function fail(message){throw new Error(message);}
   function text(v,max=100){if(typeof v!=='string'||v.length>max)fail('Chart labels must be text, up to '+max+' characters.');return v.replace(/[\u0000-\u001f]/g,'');}
@@ -156,9 +167,10 @@
       });categoryLabels(px);if(type!=='waterfall')legend();
     }
     const table=data(spec),desc=table.rows.map(r=>r.join(': ')).join('; ');
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 480" width="800" height="480" role="img" aria-label="${esc(spec.title)}"><title>${esc(spec.title)}</title><desc>${esc(desc)}</desc><rect width="800" height="480" rx="16" fill="#fff"/><g font-family="Arial, sans-serif" font-size="13" fill="#283243"><text x="36" y="40" font-size="22" font-weight="bold">${esc(spec.title.slice(0,58))}</text><text x="36" y="65" fill="#697386">${esc(spec.unit)}</text>${out}</g></svg>`;
+    const titles=titleLines(spec.title),offset=(titles.length-1)*28,height=480+offset;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 ${height}" width="800" height="${height}" role="img" aria-label="${esc(spec.title)}"><title>${esc(spec.title)}</title><desc>${esc(desc)}</desc><rect width="800" height="${height}" rx="16" fill="#fff"/><g font-family="Arial, sans-serif" font-size="13" fill="#283243">${titles.map((line,i)=>`<text x="36" y="${40+i*28}" font-size="22" font-weight="bold">${esc(line)}</text>`).join('')}<text x="36" y="${65+offset}" fill="#697386">${esc(spec.unit)}</text><g transform="translate(0,${offset})">${out}</g></g></svg>`;
   }
   function variants(spec){return categorical.includes(spec.chartType)&&spec.chartType!=='waterfall'?['bar','horizontal-bar','stacked-bar','percent-bar','line','step','area','stacked-area','pie','doughnut','radar','funnel']:[spec.chartType];}
-  root.OrbitCharts={types,normalize,svg,data,variants,histogram};
+  root.OrbitCharts={types,normalize,svg,data,variants,histogram,titleLines};
   if(typeof module!=='undefined')module.exports=root.OrbitCharts;
 })(typeof window==='undefined'?globalThis:window);

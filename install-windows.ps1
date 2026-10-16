@@ -289,6 +289,8 @@ $assets = @(
     'usage.js',
     'widgets-ui.js',
     'icon.svg',
+    'pwa-appearance.js',
+    'custom-theme.js',
     'index.html',
     'manifest.webmanifest',
     'orbit-start-windows.ps1',
@@ -298,7 +300,7 @@ $assets = @(
     'openai_gateway.py', 'deepseek.py',
     'aicredits.py',
     'service-worker.js',
-    'styles.css'
+    'styles.css', 'mobile.css', 'mobile.js'
 )
 
 foreach ($asset in $assets) {

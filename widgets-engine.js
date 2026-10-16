@@ -19,7 +19,7 @@ const shortCallout = block => {const text=typeof block.text==='string'?block.tex
 const runs = value => typeof value === 'string' ? [{text:value}] : value;
 const slideText = value => runs(value).map(r => ({text:r.text,options:{...(r.bold?{bold:true}:{}),...(r.italic?{italic:true}:{}),...(r.underline?{underline:{style:'sng'}}:{}),...(r.color?{color:r.color}:{})}}));
 
-export async function generate(spec,{images={},visuals={},preview=false}={}) {
+export async function generate(spec,{images={},visuals={},preview=false,measureOnly=false}={}) {
   images={...images};
   const style=documentStyle(spec),accent='#'+style.accent,tint='#'+style.tint;
   const pdfFont={sans:'Roboto',serif:'Serif',mono:'Mono'}[style.font],wordFont={sans:'Arial',serif:'Georgia',mono:'Courier New'}[style.font];
@@ -75,7 +75,7 @@ export async function generate(spec,{images={},visuals={},preview=false}={}) {
       content.at(-1).id='orbit-body-'+(b.type==='paragraph'?'paragraph-':'')+index;
       if (pageBreak) { content.at(-1).pageBreak = 'before'; pageBreak = false; }
     });
-    return pdfBlob(pdfMake,{pageBreakBefore:keepHeadingWithBody,info:{title:spec.title,author:'Orbit'},pageSize:style.pageSize,pageMargins:[44,48,44,48],background:(_,size)=>style.border==='none'?null:{canvas:style.border==='frame'?[{type:'rect',x:23,y:23,w:size.width-46,h:size.height-46,lineColor:accent,lineWidth:.6}]:[{type:'line',x1:44,y1:29,x2:size.width-44,y2:29,lineColor:accent,lineWidth:2}]},defaultStyle:{font:pdfFont,color:'#243244',fontSize:11,lineHeight:1.15},styles:{title:{fontSize:26,bold:true,color:accent,margin:[0,0,0,22]},heading:{fontSize:16,bold:true,color:accent,margin:[0,14,0,8]},subheading:{fontSize:13,bold:true,color:accent,margin:[0,12,0,6]}},content,footer:(page,total)=>({text:`${page} / ${total}`,alignment:'center',fontSize:9,color:'#6b7280'})},{compact:!spec.blocks.some(b=>b.type==='pageBreak')});
+    return pdfBlob(pdfMake,{pageBreakBefore:keepHeadingWithBody,info:{title:spec.title,author:'Orbit'},pageSize:style.pageSize,pageMargins:[44,48,44,48],background:(_,size)=>style.border==='none'?null:{canvas:style.border==='frame'?[{type:'rect',x:23,y:23,w:size.width-46,h:size.height-46,lineColor:accent,lineWidth:.6}]:[{type:'line',x1:44,y1:29,x2:size.width-44,y2:29,lineColor:accent,lineWidth:2}]},defaultStyle:{font:pdfFont,color:'#243244',fontSize:11,lineHeight:1.15},styles:{title:{fontSize:26,bold:true,color:accent,margin:[0,0,0,22]},heading:{fontSize:16,bold:true,color:accent,margin:[0,14,0,8]},subheading:{fontSize:13,bold:true,color:accent,margin:[0,12,0,6]}},content,footer:(page,total)=>({text:`${page} / ${total}`,alignment:'center',fontSize:9,color:'#6b7280'})},{compact:!spec.blocks.some(b=>b.type==='pageBreak'),measureOnly});
   }
   if(spec.kind==='docx') {
     if(spec.style?.templateId)throw Error('Resolve the selected Word formatting sample before export.');

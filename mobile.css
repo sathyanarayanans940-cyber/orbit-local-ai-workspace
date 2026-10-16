@@ -1,0 +1,176 @@
+/* Shared phone/tablet layout. Desktop reading density stays unchanged. */
+@media (max-width: 900px) {
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  body { min-width: 0; position: fixed; top: var(--mobile-top, 0px); width: 100%; height: var(--mobile-height, 100dvh); }
+  .app-shell { width: 100%; height: 100%; }
+  .main-content { min-width: 0; }
+  .topbar { flex-shrink: 0; min-height: calc(56px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); }
+  .mobile-title { font-size: 18px; letter-spacing: -.5px; }
+  .mobile-menu { margin-right: 6px; }
+  .icon-button, .composer-icon, .conversation-tools .icon-button { width: 44px; height: 44px; flex-shrink: 0; }
+  .icon-button svg, .conversation-tools .icon-button svg { width: 20px; height: 20px; }
+  .sidebar, .app-shell.sidebar-collapsed .sidebar { width: min(324px, calc(100vw - 48px)); height: var(--mobile-height, 100dvh); top: var(--mobile-top, 0px); bottom: auto; padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; }
+  .sidebar-top { padding: 0 0 14px; flex-shrink: 0; }
+  .sidebar-top .brand { gap: 6px; font-size: 20px; }
+  .sidebar-top-actions { gap: 0; }
+  .sidebar-toggle { display: none !important; }
+  .mobile-close { display: inline-grid !important; }
+  .app-shell.sidebar-collapsed .brand > span, .app-shell.sidebar-collapsed .new-chat-button > span, .app-shell.sidebar-collapsed .sidebar-mode-button > span, .app-shell.sidebar-collapsed .account-copy, .app-shell.sidebar-collapsed .section-label { display: revert; }
+  .app-shell.sidebar-collapsed .brand { display: inline-flex; }
+  .app-shell.sidebar-collapsed .sidebar-modes, .app-shell.sidebar-collapsed .new-chat-button, .app-shell.sidebar-collapsed .sidebar-mode-button { width: 100%; margin-inline: 0; justify-content: flex-start; }
+  .app-shell.sidebar-collapsed .sidebar-mode-button, .app-shell.sidebar-collapsed .new-chat-button { padding-inline: 12px; }
+  .sidebar-modes, .new-chat-button, .sidebar-bottom { flex-shrink: 0; }
+  .history { min-height: 72px; flex: 1 0 auto; overflow: visible; }
+  .history-scroll-indicator { display: none; }
+  .sidebar-mode-button, .history-item, .new-chat-button, .account-menu-item, .theme-option { min-height: 44px; }
+  .sidebar-bottom { position: sticky; bottom: 0; transform: none; padding-top: 8px; margin-top: auto; background: var(--sidebar); z-index: 3; }
+  .account-menu { max-width: calc(100vw - 40px); max-height: calc(var(--mobile-height, 100dvh) - 100px); overflow: auto; overscroll-behavior: contain; }
+  .account-row { min-height: 64px; }
+  .chat-page { min-height: 0; padding-top: 0; }
+  .conversation-header { padding: 4px 12px 6px; gap: 6px; flex-shrink: 0; margin-bottom: 0; }
+  .conversation-title-row h1 { font-size: 17px; }
+  .conversation-title-area { flex: 1; }
+  .conversation-tools { gap: 0; flex-shrink: 0; }
+  .title-edit-button { width: 32px; height: 44px; flex-shrink: 0; }
+  .title-editor input { width: 100%; min-width: 0; font-size: 16px; }
+  .title-editor { min-width: 0; }
+  .chat-page.empty-state { padding: 0 16px max(24px, env(safe-area-inset-bottom)); }
+  .chat-page.empty-state .conversation-header { inset: 4px 0 auto; padding-inline: 12px; }
+  .chat-page.empty-state .welcome { padding-bottom: 24px; }
+  .chat-page.empty-state .welcome h2 { font-size: clamp(22px, 5.5vw, 28px); text-wrap: balance; }
+  .messages { padding-inline: max(16px, env(safe-area-inset-left)) max(16px, env(safe-area-inset-right)); }
+  .message, .message-body, .message.user .message-body { min-width: 0; max-width: 100%; }
+  .message-text { overflow-wrap: anywhere; }
+  .chat-page .message-text, .chat-page .message.user .message-text { font-size: calc(15px * var(--chat-font-scale, 1)); line-height: 1.65; }
+  .message.user .message-body { width: auto; max-width: 94%; }
+  .message.user .message-bubble { padding: 10px 15px; border-radius: 22px; }
+  .message-action { min-width: 44px; min-height: 44px; padding: 10px; }
+  .message.assistant .message-actions, .message.user .message-actions { gap: 0; flex-wrap: wrap; }
+  .message-action svg { width: 18px; height: 18px; }
+  .chat-page:not(.empty-state) .composer-zone { bottom: max(8px, env(safe-area-inset-bottom)); width: calc(100% - max(24px, env(safe-area-inset-left) + env(safe-area-inset-right))); }
+  .composer { padding: 6px 8px; min-height: 58px; }
+  #prompt-input { font-size: 16px; line-height: 1.5; max-height: min(180px, 32dvh); }
+  .send-button { width: 44px; height: 44px; }
+  .shortcut-hint { display: none; }
+  .thinking-button { min-width: 44px; min-height: 44px; }
+  .disclaimer { padding-inline: 12px; font-size: 10px; text-align: center; }
+  .jump-to-latest { width: 44px; height: 44px; bottom: calc(var(--composer-clearance, 100px) + 8px); }
+  .plus-menu button, .conversation-menu button, .workspace-tools-menu button { min-height: 44px; }
+  .plus-menu { max-width: calc(100vw - 32px); }
+  .model-submenu .model-option { padding: 12px; }
+  .model-option-name { overflow-wrap: anywhere; white-space: normal; }
+  #thinking-menu { max-height: calc(var(--mobile-height, 100dvh) - 140px); overflow-y: auto; }
+  .conversation-menu, .workspace-tools-menu { max-width: calc(100vw - 24px); max-height: calc(var(--mobile-height, 100dvh) - 130px); overflow-y: auto; }
+  .code-block, .table-wrap, .generated-file-pill, .attachment-chip, .orbit-chart, .orbit-diagram { max-width: 100%; min-width: 0; }
+  .code-header { padding-inline: 10px; gap: 6px; }
+  .code-header-title { min-width: 0; overflow: hidden; }
+  .copy-code, .copy-table, .file-download-trigger { min-width: 44px; min-height: 44px; }
+  .code-content { -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+  .diagram-plot, .chart-plot, .table-wrap { overscroll-behavior-x: contain; }
+  .chart-toolbar { opacity: 1; pointer-events: auto; flex-wrap: wrap; }
+  .chart-toolbar button { min-width: 40px; min-height: 44px; }
+  .chart-tooltip { max-width: min(280px, calc(100vw - 32px)); overflow-wrap: anywhere; }
+  .generated-file-pill { width: 100%; padding: 12px; border-radius: 16px; }
+  .message-file-name { overflow: hidden; text-overflow: ellipsis; }
+  .toast { bottom: max(16px, env(safe-area-inset-bottom)); width: max-content; max-width: calc(100vw - 32px); font-size: 13px; overflow-wrap: anywhere; }
+  /* One scrollable settings pane, with navigation and actions always reachable. */
+  .preferences-modal { top: var(--mobile-top, 0px); bottom: auto; height: var(--mobile-height, 100dvh); padding: 0; }
+  .preferences-dialog { --settings-inset: 18px; width: 100%; height: 100%; max-height: none; padding: max(16px, env(safe-area-inset-top)) var(--settings-inset) max(12px, env(safe-area-inset-bottom)); border: 0; border-radius: 0; animation: none; }
+  .preferences-header { align-items: center; flex-shrink: 0; }
+  .preferences-header .eyebrow { display: none; }
+  .preferences-header h2 { font-size: 24px; }
+  .settings-layout { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+  .settings-nav { display: flex; flex-direction: row; gap: 4px; flex: 0 0 auto; overflow-x: auto; padding: 0 18px 6px 0; scrollbar-width: thin; overscroll-behavior-x: contain; }
+  .settings-nav-item { width: auto; flex: 0 0 auto; min-height: 44px; padding: 10px 14px; font-size: 14px; border-radius: 12px; }
+  .settings-panels { flex: 1; overscroll-behavior: contain; scrollbar-gutter: auto; padding-bottom: 20px; }
+  .settings-panel h3 { font-size: 20px; }
+  .preferences-actions { flex-shrink: 0; padding-top: 12px; margin-top: 0; }
+  .preferences-button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; font-size: 14px; padding: 10px 16px; }
+  .preferences-button[hidden] { display: none; }
+  .preferences-actions .preferences-button { flex: 1; }
+  input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=color]), textarea, select { font-size: 16px !important; }
+  .preference-field label { font-size: 14px; }
+  .settings-hint, .settings-field-hint, .settings-panel-description, .preference-field p { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+  .preference-range { min-height: 36px; }
+  .preference-color-picker { min-height: 44px; }
+  .custom-preset-actions input, .custom-preset-actions select { min-width: 0; flex-basis: 100%; }
+  .custom-theme-preview { grid-template-columns: 76px minmax(0, 1fr); }
+  .custom-preview-chat { overflow: hidden; }
+  .custom-theme-preview aside { padding-inline: 8px; overflow: hidden; }
+  .custom-theme-preview aside strong { font-size: 15px; }
+  .custom-theme-preview aside span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .custom-color-row { grid-template-columns: minmax(0,1fr) 44px 100px; }
+  .custom-color-row input[type=color] { width: 44px; height: 44px; }
+  .custom-color-row input[type=text] { width: 100px; min-height: 44px; }
+  .custom-enable { min-height: 44px; }
+  .custom-preset-actions button { min-height: 44px; }
+  .archive-browser { padding: 0; margin: 12px 0; }
+  .archive-breadcrumbs button, .sheet-tabs button, .sheet-nav button { min-height: 44px; }
+  .sheet-nav { flex-wrap: wrap; }
+  .custom-preview-chat pre { overflow-x: auto; }
+  .confirmation-modal, .project-rename-modal { top: var(--mobile-top, 0px); bottom: auto; height: var(--mobile-height, 100dvh); padding: 16px; overflow-y: auto; }
+  .confirmation-dialog, .project-rename-dialog { max-height: 100%; overflow-y: auto; }
+  .confirmation-actions { flex-wrap: wrap; }
+  .workspace-page-inner { padding: 24px 16px max(24px, env(safe-area-inset-bottom)); }
+  .workspace-header { flex-wrap: wrap; }
+  .files-library-actions { flex-wrap: wrap; gap: 12px; }
+  .files-search { width: 100%; }
+  .file-library-card { grid-template-columns: minmax(0, 1fr); gap: 8px; padding-block: 16px; }
+  .files-list-heading { display: none; }
+  .file-library-chat { padding-left: 44px; }
+  .project-card-menu button, .project-new-chat-button, .library-copy-button { min-height: 44px; }
+  .library-controls, .usage-filters { flex-wrap: wrap; }
+  #file-preview { top: var(--mobile-top, 0px); bottom: auto; width: 100%; height: var(--mobile-height, 100dvh); padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+  #file-preview header { padding: 8px 12px; gap: 6px; flex-wrap: wrap; }
+  #preview-name { flex-basis: 100%; font-size: 14px; padding: 4px 0; }
+  .preview-controls { width: 100%; justify-content: flex-end; gap: 2px; }
+  .preview-controls button, #preview-zoom { width: 44px; height: 44px; min-width: 0; }
+  .viewer-tab { flex-basis: 180px; }
+  .viewer-tab-close { width: 44px; height: 44px; margin-right: 0; }
+  .preview-pane { padding: 12px; }
+  .preview-page { padding: 16px; }
+  .preview-slide-columns { flex-direction: column; }
+  .sheet-viewer { padding: 8px; }
+}
+@media (max-width: 900px) and (max-height: 500px) {
+  .chat-page.empty-state .welcome { padding-bottom: 12px; }
+  .chat-page.empty-state .welcome h2 { font-size: 22px; }
+  .chat-page.empty-state .conversation-header { position: static; margin-bottom: auto; }
+  .chat-page.empty-state { justify-content: flex-end; padding-bottom: 12px; }
+  .preferences-dialog { --settings-inset: 12px; padding-top: 8px; padding-bottom: 8px; }
+  .preferences-header h2 { font-size: 20px; }
+  .settings-layout { margin-top: 6px; gap: 8px; }
+  .settings-nav-item { padding-block: 8px; }
+  .disclaimer { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar, .scrim, .toast, .preferences-dialog { animation: none !important; transition: none !important; }
+}
+
+@media (max-width: 900px) {
+  .edit-toolbar > span { display: none; }
+  .edit-toolbar button { min-height: 44px; padding-inline: 16px; }
+}
+
+@media (max-width: 900px) {
+  .confirmation-dialog { display: flex; flex-direction: column; overflow: hidden; }
+  .confirmation-dialog p { min-height: 0; overflow-y: auto; overflow-wrap: anywhere; overscroll-behavior: contain; }
+  .confirmation-dialog h2, .confirmation-icon, .confirmation-actions { flex-shrink: 0; }
+}
+
+/* Keep diagrams readable without letting tall graphs consume the whole chat. */
+@media (max-width: 900px) {
+  .diagram-plot { max-height: min(480px, 60dvh); overflow: auto; overscroll-behavior: contain; }
+  .diagram-toolbar button { width: 44px; height: 44px; }
+  .orbit-diagram .widget-chart-heading { align-items: flex-start; gap: 8px; }
+  .orbit-diagram .widget-chart-heading > strong { min-width: 0; overflow-wrap: anywhere; }
+  .preview-controls { flex-wrap: wrap; }
+}
+#preview-fit, #preview-actual { width: auto; min-width: 44px; padding-inline: 8px; font: inherit; font-size: 12px; }
+#preview-fit[hidden], #preview-actual[hidden] { display: none; }
+
+@media (max-width: 380px) {
+ .preview-controls:has(#preview-fit:not([hidden])) { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); }
+ .preview-controls #preview-fit:not([hidden]) { grid-column: 1 / 3; }
+ .preview-controls #preview-actual:not([hidden]) { grid-column: 3 / 6; }
+}

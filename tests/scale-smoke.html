@@ -1,0 +1,10 @@
+<!doctype html><meta charset="utf-8"><title>Orbit synthetic 500-chat UI test</title>
+<script>
+// Disposable test origin only; never seed the real Orbit installation.
+if(location.hostname==='127.0.0.1'&&location.port==='8779'){
+ const chats=Object.fromEntries(Array.from({length:500},(_,i)=>['scale-'+i,{title:'Study session '+i,updatedAt:i,pinned:i>=498,messages:[{role:'user',text:'Synthetic study question '+i},{role:'assistant',text:'Synthetic answer '+i}]}]));
+ localStorage.setItem('orbit-conversations-v1',JSON.stringify(chats));
+ localStorage.setItem('orbit-memory-preferences-v1',JSON.stringify({mode:'off',about:''}));
+ location.replace('/index.html');
+}
+</script>

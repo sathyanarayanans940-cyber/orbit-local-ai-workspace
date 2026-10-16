@@ -14,7 +14,7 @@ export function trailingPageFill(pages,margin=48){
  return observed?Math.min(1,(bottom-margin)/(height-2*margin)):1;
 }
 const clone=value=>Array.isArray(value)?value.map(clone):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).map(([k,v])=>[k,clone(v)])):value;
-export function pdfBlob(pdfMake,definition,{compact=true,timeout=90000}={}){
+export function pdfBlob(pdfMake,definition,{compact=true,timeout=90000,measureOnly=false}={}){
  return new Promise((resolve,reject)=>{
   let finished=false;const timer=setTimeout(()=>fail(Error('PDF creation timed out. Try again or split a very large document.')),timeout);
   const fail=error=>{if(finished)return;finished=true;clearTimeout(timer);reject(error);};
@@ -32,9 +32,10 @@ export function pdfBlob(pdfMake,definition,{compact=true,timeout=90000}={}){
    }
    try{pdfMake.createPdf(docDefinition).getStream({},doc=>{
     try{
+     const pages=doc._pdfMakePages?.length;
      const retry=compact&&attempt<2&&trailingPageFill(doc._pdfMakePages)<.33;
-     const chunks=[];doc.on('error',fail);doc.on('data',chunk=>{if(!retry)chunks.push(chunk);});
-     doc.on('end',()=>{if(finished)return;if(retry){render(attempt+1);return;}finished=true;clearTimeout(timer);resolve(new Blob(chunks,{type:'application/pdf'}));});doc.end();
+     const chunks=[];doc.on('error',fail);doc.on('data',chunk=>{if(!retry&&!measureOnly)chunks.push(chunk);});
+     doc.on('end',()=>{if(finished)return;if(retry){render(attempt+1);return;}finished=true;clearTimeout(timer);if(measureOnly){if(!Number.isInteger(pages)||pages<1){reject(Error('PDF layout did not provide a page count.'));return;}resolve({pages});}else resolve(new Blob(chunks,{type:'application/pdf'}));});doc.end();
     }catch(error){fail(error);}
    });}catch(error){fail(error);}
   };

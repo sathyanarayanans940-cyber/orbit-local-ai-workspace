@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orbit web and preparation status preview</title>
+<link rel="stylesheet" href="../styles.css?v=147">
+<style>
+  html,body { overflow:auto; height:auto; }
+  body { padding:24px; background:var(--bg); }
+  main { max-width:760px; margin:auto; }
+  .message { animation:none; margin:0 0 18px; }
+  .message.assistant .message-body { max-width:100%; }
+  .widget-setting { margin:16px 0; }
+</style>
+<main><div id="statuses"></div><div id="widgets-content"></div></main>
+<script src="../vendor/katex/katex.min.js"></script>
+<script src="../widgets.js?v=6"></script>
+<script src="../web-tools.js?v=1"></script>
+<script>
+  document.documentElement.dataset.theme=new URLSearchParams(location.search).get('theme')||'dark';
+  Promise.all([fetch('../app.js').then(r=>r.text()),fetch('../widgets-ui.js').then(r=>r.text())]).then(([source,ui])=> {
+    const renderer=source.slice(source.indexOf('function escapeHtml('),source.indexOf('function latestUserMessageIndex('));
+    const markup=new Function('window','icons','state','widgetMarkup','isImageFile',renderer+';return messageContentMarkup;')(window,{copy:''},{currentChat:'preview'},()=>'',()=>false);
+    const messages=['pdf','docx','pptx'].map(kind=>({role:'assistant',generating:true,text:'```orbit-widget\n'+JSON.stringify({kind,title:'Example'}).slice(0,-1)}));
+    messages.push({role:'assistant',text:'An answer with verified source links.',webSources:[{url:'https://docs.ollama.com/',title:'Ollama documentation'}]});
+    document.querySelector('#statuses').innerHTML=messages.map((message,i)=>`<article class="message assistant"><div class="message-body"><div class="message-text">${markup(message,i)}</div></div></article>`).join('');
+    new Function(ui+';return renderWidgetsPage;')()();
+  });
+</script>
+</html>

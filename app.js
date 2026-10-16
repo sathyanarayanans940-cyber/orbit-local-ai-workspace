@@ -1440,7 +1440,7 @@ function syncComposerClearance() {
   if (!chatPage || !composerZone || !messagesWrap || chatPage.classList.contains('empty-state')) return;
   const distanceFromBottom = messagesWrap.scrollHeight - messagesWrap.scrollTop - messagesWrap.clientHeight;
   const preserveBottom = followLatest && distanceFromBottom <= 48;
-  const breathingRoom = window.matchMedia('(max-width: 760px)').matches ? 14 : 18;
+  const breathingRoom = window.matchMedia('(max-width: 900px)').matches ? 14 : 18;
   const clearance = Math.ceil(composerZone.getBoundingClientRect().height + breathingRoom);
   chatPage.style.setProperty('--composer-clearance', `${Math.max(96, clearance)}px`);
   if (preserveBottom) requestAnimationFrame(() => { if (followLatest) messagesWrap.scrollTop = messagesWrap.scrollHeight; });
@@ -1497,8 +1497,11 @@ function startEditing(messageIndex) {
   const body = $('.message-body', article);
   body.innerHTML = `<div class="edit-card"><textarea class="edit-input" rows="4" aria-label="Edit message">${escapeHtml(message.text)}</textarea><div class="edit-toolbar"><span>⌘ Enter to save</span><div class="edit-buttons"><button class="edit-button cancel-edit" type="button" data-edit-action="cancel">Cancel</button><button class="edit-button save-edit" type="button" data-edit-action="save">Save</button></div></div></div>`;
   const input = $('.edit-input', body);
+  followLatest = false;
   input.focus();
   input.setSelectionRange(input.value.length, input.value.length);
+  // Replacing a tall bubble can move the editor outside Safari's scroll anchor.
+  requestAnimationFrame(() => article.scrollIntoView({block:'center',behavior:'instant'}));
 }
 
 function finishEditing(editAction) {
@@ -1626,10 +1629,12 @@ function applySurfaceAppearance() {
   const textColor = adjustedTextColor(textBase, textTone);
   document.documentElement.style.setProperty('--sidebar', adjustedSurfaceColor(sidebarBase, sidebarTone));
   document.documentElement.style.setProperty('--bg', adjustedSurfaceColor(chatBase, chatTone));
+  window.OrbitAppearance?.sync(state.theme, adjustedSurfaceColor(chatBase, chatTone));
   document.documentElement.style.setProperty('--text', textColor);
   document.documentElement.style.setProperty('--sidebar-ink', textColor);
   document.documentElement.style.setProperty('--chat-pill-ink', textColor);
   document.documentElement.style.setProperty('--conversation-menu-ink', textColor);
+  window.OrbitCustom?.apply();
   updateSurfaceToneLabels();
 }
 
@@ -1847,6 +1852,7 @@ function resetAppearanceSettings() {
 }
 
 function closePreferences() {
+  window.OrbitCustom?.cancel();
   closeDefaultModelPicker();
   $('#gemini-api-key').value = '';
   $('#openai-api-key').value = '';
@@ -2077,6 +2083,7 @@ function requestConfirmation({ title, message, confirmLabel = 'Confirm' }) {
 }
 
 function openPreferences() {
+  window.OrbitCustom?.begin();
   $('#voice-language-input').value = OrbitVoice.language();
   closeAccountMenu();
   $('#local-model-settings-nav').hidden = Boolean(window.ORBIT_CLOUD);
@@ -2128,7 +2135,7 @@ function openPreferences() {
   renderDefaultModelOptions(localStorage.getItem(DEFAULT_MODEL_KEY) || '');
   modal.hidden = false;
   document.body.classList.add('preferences-open');
-  requestAnimationFrame(() => { input.focus(); input.select(); });
+  requestAnimationFrame(() => { if (matchMedia('(pointer: coarse)').matches) $('#close-preferences').focus(); else {input.focus(); input.select();} });
 }
 
 function savePreferences(event) {
@@ -2140,6 +2147,7 @@ function savePreferences(event) {
     $('#display-name-input').focus();
     return;
   }
+  try { window.OrbitCustom?.commit(); } catch (_) { showToast('Custom colors could not be saved. Check browser storage and retry.'); return; }
   state.displayName = value;
   localStorage.setItem(DISPLAY_NAME_KEY, value);
   const fontScale = Number($('#chat-font-size-input').value) / 100;
@@ -3419,7 +3427,7 @@ function positionModelSubmenu() {
   const left=beside ? rect.right+8 : Math.max(12,Math.min(rect.left,window.innerWidth-width-12));
   panel.style.left=`${left-rect.left-$('#plus-menu').clientLeft}px`;
   panel.style.bottom=`${beside ? 0 : rect.height+8}px`;
-  const topClearance = window.innerWidth <= 760 ? 72 : 12;
+  const topClearance = window.innerWidth <= 900 ? 72 : 12;
   panel.style.maxHeight=`${Math.min(288,Math.max(40,(beside?rect.bottom:rect.top-8)-topClearance))}px`;
 }
 
@@ -3998,6 +4006,14 @@ function notifyVisionCapability(attachments) {
   return true;
 }
 
+function replyFailureText(error,keptMessage=false) {
+  if(error?.documentGeneration)return Number(error.completedSections)>0
+    ? 'I couldn’t finish generating the document. Completed sections are saved; retry this request to resume.'
+    : 'I couldn’t finish generating the document. Your request is kept in this conversation; retry to generate it again.';
+  if(error?.providerStalled)return 'The model stopped making progress. Your request is kept; retry in a moment or choose another model.';
+  return 'I couldn’t reach the selected model. Check the connection details below, then try again.'+(keptMessage?' I’ve kept your message in this conversation.':'');
+}
+
 async function requestRuntime(url, options, provider, usageMetadata = {}) {
   let lastError;
   for (let attempt = 0; attempt < (['DeepSeek','AICredits','OpenAI'].includes(provider) ? 1 : 2); attempt += 1) {
@@ -4030,7 +4046,7 @@ async function requestRuntime(url, options, provider, usageMetadata = {}) {
     } catch (error) {
       if(options.signal?.aborted){void usage?.finish('cancelled');throw error;}
       void usage?.finish('failed');
-      lastError=connectionController.signal.aborted?Object.assign(new Error('The runtime connection timed out.'),{retryable:true}):error;
+      lastError=connectionController.signal.aborted?Object.assign(new Error(provider==='DeepSeek'?'DeepSeek did not start responding within two minutes. The request was stopped; retry in a moment or choose another model.':'The runtime connection timed out.'),{retryable:provider!=='DeepSeek',...(provider==='DeepSeek'?{providerStalled:true}:{})}):error;
     } finally {
       // This timer covers connection/headers only, never an active long reply.
       clearTimeout(connectionTimer);
@@ -4050,18 +4066,20 @@ function runtimeTextChunk(data, provider) {
   return text;
 }
 
-async function readRuntimeStream(response, provider, { onToken, onStatus, onThinking, onThinkingActivity, onToolRoute, onToolPending, allowLength = false } = {}) {
+async function readRuntimeStream(response, provider, { onToken, onStatus, onThinking, onThinkingActivity, onToolRoute, onToolPending, allowLength = false, signal } = {}) {
   let limitReached=false, visibleText=false;
   let completed=false;
   let terminal=false;
   const usage=typeof OrbitUsage!=='undefined'?OrbitUsage.response(response):null;
   let sawThinking=false;
   let activityBuffer='';
+  let markProgress=()=>{};
   const observeThinking=data=>{
     usage?.packet(data);
     if(data?.orbit_tool_pending){if(provider!=='OpenAI'||!onToolPending)throw toolRouteError();onToolPending();}
     if(data?.orbit_tool_route){if(provider!=='OpenAI'||!onToolRoute)throw toolRouteError();onToolRoute(data.orbit_tool_route);}
     const thinking=provider==='Ollama'?data?.message?.thinking:(data?.choices?.[0]?.delta?.reasoning_content ?? data?.choices?.[0]?.delta?.reasoning ?? data?.choices?.[0]?.message?.reasoning_content ?? data?.choices?.[0]?.message?.reasoning);
+    if(typeof thinking==='string'&&thinking.trim())markProgress();
     if(!sawThinking && ((typeof thinking==='string' && thinking.trim()) || (provider==='OpenAI' && data?.orbit_thinking===true))) {
       sawThinking=true;onThinking?.();onStatus?.('Thinking');
       usage?.thinking();
@@ -4109,6 +4127,17 @@ async function readRuntimeStream(response, provider, { onToken, onStatus, onThin
   }
 
   const reader = response.body.getReader();
+  // DeepSeek streams both reasoning and text, so its empty keepalives must not
+  // extend a stalled generation forever. Do not infer the same silence from
+  // other providers, which may hide active reasoning. Real DeepSeek progress
+  // renews this deadline; there is no total time limit on an active reply.
+  let progressTimer,rejectProgress;
+  markProgress=()=>{
+    clearTimeout(progressTimer);
+    if(provider!=='DeepSeek')return;
+    progressTimer=setTimeout(()=>rejectProgress?.(Object.assign(new Error(`${provider} sent no answer or reasoning for three minutes. The request was stopped; retry in a moment or choose another model.`),{providerStalled:true,retryable:false})),180000);
+  };
+  markProgress();
   const decoder = new TextDecoder();
   let buffer = '';
   let skipLineFeed = false;
@@ -4164,7 +4193,7 @@ async function readRuntimeStream(response, provider, { onToken, onStatus, onThin
     }
     observeThinking(data);
     const chunk = String(runtimeTextChunk(data, provider) || '');
-    if (chunk) { visibleText ||= !!chunk.trim();usage?.text();text += chunk; onToken?.(chunk); }
+    if (chunk) { if(chunk.trim())markProgress();visibleText ||= !!chunk.trim();usage?.text();text += chunk; onToken?.(chunk); }
     checkCompletion(data);
   };
 
@@ -4173,13 +4202,13 @@ async function readRuntimeStream(response, provider, { onToken, onStatus, onThin
       let idleTimer;
       let packet;
       try {
-        packet = await Promise.race([reader.read(), new Promise((resolve, reject) => {
+        packet = await Promise.race([reader.read(), new Promise((_,reject)=>{rejectProgress=reject;}), new Promise((resolve, reject) => {
           idleTimer = setTimeout(() => {
             if(completed){terminal=true;void reader.cancel().catch(()=>{});resolve({done:true});}
-            else reject(new Error('The runtime stopped sending data for two minutes. Try again or check the runtime.'));
+            else reject(Object.assign(new Error('The runtime stopped sending data for two minutes. Try again or check the runtime.'),provider==='DeepSeek'?{providerStalled:true,retryable:false}:{}));
           }, completed?3000:120000);
         })]);
-      } finally { clearTimeout(idleTimer); }
+      } finally { clearTimeout(idleTimer);rejectProgress=null; }
       const { value, done } = packet;
       let decoded = decoder.decode(value || new Uint8Array(), { stream: !done });
       // SSE accepts LF, CRLF and CR. A CR at a byte boundary already ends
@@ -4202,11 +4231,13 @@ async function readRuntimeStream(response, provider, { onToken, onStatus, onThin
     if (!completed) throw new Error('The connection ended before the model finished its response. Please retry.');
     if(!terminal)void reader.cancel().catch(()=>{});
   } catch (error) {
+    if(signal?.aborted)error=new DOMException('Stopped','AbortError');
     void usage?.finish(error.name==='AbortError'?'cancelled':'failed');
     if(error.retryable===undefined && /malformed response data|ended while sending|connection ended|stopped sending data|network|terminated/i.test(error.message||''))error.retryable=true;
     void reader.cancel().catch(() => {});
     throw error;
   } finally {
+    clearTimeout(progressTimer);
     reader.releaseLock();
   }
   void usage?.finish(limitReached?'failed':'success');return { text, ...(limitReached?{limitReached:true}:{}) };
@@ -4430,8 +4461,9 @@ async function requestRoutedReply(prompt, originalConversation, callbacks, selec
     // Document routing is a control step; defer its preface so malformed local
     // tool syntax cannot leak into the answer or bypass sectioned drafting.
     let documentControl='';
-    const reply=await requestLocalReply(prompt,[{role:'system',text:routingInstruction(available,native)+'\n\n'+(typeof OrbitWidgets!=='undefined'?OrbitWidgets.capabilityInstruction?.(String(user?.text??prompt))||'':'')+'\n\n'+profile},...conversation],{
-      ...callbacks,widgets:false,streamAnswer:true,nativeToolCapabilities:native?available:undefined,
+    const documentRouting=documentExpected?'\n\nThis is the document-tool selection stage only. Decide which enabled tools this request needs, including research or calculations when useful, and select files for the requested deliverable. Return the tool call now; do not draft the document, outline, file recipe or a promise to write it in this stage. The separate document writer will receive the complete brief and actual tool evidence. If clarification is genuinely required, ask it directly instead.':'';
+    const reply=await requestLocalReply(prompt,[{role:'system',text:routingInstruction(available,native)+'\n\n'+(typeof OrbitWidgets!=='undefined'?OrbitWidgets.capabilityInstruction?.(String(user?.text??prompt))||'':'')+'\n\n'+profile+documentRouting},...conversation],{
+      ...callbacks,widgets:false,streamAnswer:true,routingDocument:documentExpected,nativeToolCapabilities:native?available:undefined,
       onToken:chunk=>{if(documentExpected){documentControl+=chunk;return;}if(native){preamble+=chunk;callbacks.onToken?.(chunk);}else stream.push(chunk);},
       onToolPending:native?()=>{toolPending=true;}:undefined,
       onToolRoute:native?value=>{if(nativeRoute)throw toolRouteError();nativeRoute=parseToolRoute('<orbit-tools>'+JSON.stringify(value)+'</orbit-tools>',available);}:undefined,
@@ -4605,10 +4637,10 @@ async function requestLocalReply(prompt, conversation = state.messages, callback
   });
   // Analyze is part of solving the user's task, even when it also requests
   // structured JSON. Only administrative routing/drafting uses lighter effort.
-  const internalThinking = !callbacks.analyzing && Boolean(callbacks.naming || callbacks.planning || callbacks.repairing || callbacks.drafting);
+  const internalThinking = !callbacks.analyzing && Boolean(callbacks.naming || callbacks.planning || callbacks.repairing || callbacks.drafting || callbacks.routingDocument);
   const thinkingOptions = typeof OrbitThinking!=='undefined'?OrbitThinking.options(selected,internalThinking):{};
-  const usageMetadata={model:selected.id,remote:modelUsesCloud(selected),purpose:callbacks.naming?'title':callbacks.editing?'document-edit':callbacks.repairing?'repair':callbacks.analyzing?'analysis':callbacks.drafting?'document':callbacks.visionReading?'vision':callbacks.usagePurpose||(callbacks.planning?'planning':'answer'),mode:typeof OrbitUsage!=='undefined'?OrbitUsage.thinking(thinkingOptions):'default'};
-  const canContinue=!['naming','planning','repairing','drafting','editing','analyzing','visionReading','structured'].some(key=>callbacks[key]);
+  const usageMetadata={model:selected.id,remote:modelUsesCloud(selected),purpose:callbacks.naming?'title':callbacks.routingDocument?'document-tools':callbacks.editing?'document-edit':callbacks.repairing?'repair':callbacks.analyzing?'analysis':callbacks.drafting?'document':callbacks.visionReading?'vision':callbacks.usagePurpose||(callbacks.planning?'planning':'answer'),mode:typeof OrbitUsage!=='undefined'?OrbitUsage.thinking(thinkingOptions):'default'};
+  const canContinue=!['naming','planning','repairing','drafting','editing','analyzing','visionReading','structured','routingDocument'].some(key=>callbacks[key]);
   const continuationFor=(endpoint,headers,payload)=>canContinue?async text=>{
     if(callbacks.signal?.aborted)throw new DOMException('Stopped','AbortError');
     if(callbacks.controlPending?.())throw toolRouteError();
@@ -4644,7 +4676,8 @@ async function requestLocalReply(prompt, conversation = state.messages, callback
     ? {...thinkingOptions, ...(callbacks.naming ? {max_tokens:256} : callbacks.planning || callbacks.editing || callbacks.analyzing || callbacks.drafting ? {max_tokens:8192} : {})}
     : {temperature: callbacks.naming || callbacks.planning || callbacks.repairing || callbacks.editing || callbacks.analyzing || callbacks.drafting?0:0.7, ...(callbacks.naming || callbacks.widgets || callbacks.streamAnswer || callbacks.planning || callbacks.repairing || callbacks.editing || callbacks.analyzing || callbacks.drafting ? {max_tokens:callbacks.naming?256:callbacks.analyzing||callbacks.drafting?8192:callbacks.planning?1024:-1} : {})};
   const runtimeStarted=Date.now();
-  if (['DeepSeek','OpenAI'].includes(selected.provider) && (callbacks.widgets || callbacks.streamAnswer)) callbacks.onStatus?.(typeof OrbitThinking!=='undefined' && OrbitThinking.status(selected) || `Waiting for ${selected.provider}`);
+  if(callbacks.routingDocument)callbacks.onStatus?.('Selecting document tools');
+  else if (['DeepSeek','OpenAI'].includes(selected.provider) && (callbacks.widgets || callbacks.streamAnswer)) callbacks.onStatus?.(typeof OrbitThinking!=='undefined' && OrbitThinking.status(selected) || `Waiting for ${selected.provider}`);
   const headers={'Content-Type':'application/json',...endpoints.headers};
   const payload={model:selected.id,messages:openAiHistory,stream:true,...(callbacks.nativeToolCapabilities?{orbit_tools:callbacks.nativeToolCapabilities}:{}),stream_options:{include_usage:true},...extra,...(callbacks.structured || callbacks.planning || callbacks.repairing || callbacks.editing || callbacks.analyzing || callbacks.drafting?{response_format:{type:'json_object'}}:{})};
   const response = await requestRuntime(endpoints.chat, { method: 'POST', headers, body:JSON.stringify(payload), signal:callbacks.signal },selected.provider,usageMetadata);
@@ -4665,7 +4698,7 @@ async function requestLocalReply(prompt, conversation = state.messages, callback
   } finally {
     // Failed/truncated reasoning passes are latency too; do not hide them from
     // diagnostics just because no usable answer was returned.
-    recordRuntimeTiming({provider:selected.provider,stage:callbacks.streamAnswer?'route-or-answer':callbacks.naming?'title':callbacks.editing?'document-edit':callbacks.repairing?'repair':callbacks.analyzing?'analysis':callbacks.drafting?'document':callbacks.planning?'planning':'answer',outcome:callbacks.signal?.aborted?'cancelled':outcome,responseMs:headersAt-runtimeStarted,firstTextMs:firstTextAt===undefined?null:firstTextAt-runtimeStarted,firstThinkingMs:firstThinkingAt===undefined?null:firstThinkingAt-runtimeStarted,streamMs:Date.now()-headersAt,characters:textCharacters,requestedThinking:extra.thinking?.type||extra.reasoning_effort||'default',requestedEffort:extra.reasoning_effort||'default',serverTiming:['DeepSeek','OpenAI'].includes(selected.provider)?String(response.headers?.get('Server-Timing')||'').slice(0,256):''});
+    recordRuntimeTiming({provider:selected.provider,stage:callbacks.routingDocument?'document-tools':callbacks.streamAnswer?'route-or-answer':callbacks.naming?'title':callbacks.editing?'document-edit':callbacks.repairing?'repair':callbacks.analyzing?'analysis':callbacks.drafting?'document':callbacks.planning?'planning':'answer',outcome:callbacks.signal?.aborted?'cancelled':outcome,responseMs:headersAt-runtimeStarted,firstTextMs:firstTextAt===undefined?null:firstTextAt-runtimeStarted,firstThinkingMs:firstThinkingAt===undefined?null:firstThinkingAt-runtimeStarted,streamMs:Date.now()-headersAt,characters:textCharacters,requestedThinking:extra.thinking?.type||extra.reasoning_effort||'default',requestedEffort:extra.reasoning_effort||'default',serverTiming:['DeepSeek','OpenAI'].includes(selected.provider)?String(response.headers?.get('Server-Timing')||'').slice(0,256):''});
   }
 }
 
@@ -4841,7 +4874,7 @@ async function sendPrompt() {
     } else {
       streamedReplyRenderer?.cancel();
       typing.remove();
-      await revealAssistantReply('I couldn’t reach the selected model. Check the connection details below, then try again. I’ve kept your message in this conversation.', { footer: error.message });
+      await revealAssistantReply(replyFailureText(error,true), { footer: error.message });
     }
     updateRuntimeStatus();
   } finally {
@@ -4946,7 +4979,7 @@ async function regenerateMessage(article, { promptOverride = null, resumePrepara
     } else {
       streamedReplyRenderer?.cancel();
       typing.remove();
-      await revealAssistantReply('I couldn’t reach the selected model. Check the connection details below, then try again.', { footer: error.message });
+      await revealAssistantReply(replyFailureText(error), { footer: error.message });
     }
     updateRuntimeStatus();
   } finally {
@@ -5348,7 +5381,7 @@ $('#prompt-input').addEventListener('paste', (event) => {
 });
 $('#prompt-input').addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && voiceInput?.snapshot().active) { event.preventDefault(); voiceInput.cancel(); return; }
-  if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendPrompt(); }
+  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && !matchMedia('(pointer: coarse)').matches) { event.preventDefault(); sendPrompt(); }
 });
 $('#send-button').addEventListener('click', (event) => {
   if (state.sending) { event.preventDefault(); stopGeneration(); }

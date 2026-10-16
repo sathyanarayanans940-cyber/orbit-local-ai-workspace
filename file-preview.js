@@ -35,7 +35,7 @@ const OrbitPreview = (()=> {
   const CACHE_LIMIT=4,CACHE_BYTES=64*1024*1024;
   const panel=document.createElement('section');
   panel.id='file-preview';panel.hidden=true;panel.setAttribute('aria-label','Viewer');
-  panel.innerHTML='<div id="preview-tabs" role="tablist" aria-label="Open files"></div><header><strong id="preview-name">Viewer</strong><div class="preview-controls"><button type="button" data-preview-zoom="-1" aria-label="Zoom out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button><span id="preview-zoom">100%</span><button type="button" data-preview-zoom="1" aria-label="Zoom in"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button><button type="button" id="preview-download" aria-label="Download file"><svg><use href="#icon-arrow-down"/></svg></button><button type="button" id="preview-close" aria-label="Hide viewer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div></header><div id="preview-body" role="tabpanel" tabindex="0"></div>';
+  panel.innerHTML='<div id="preview-tabs" role="tablist" aria-label="Open files"></div><header><strong id="preview-name">Viewer</strong><div class="preview-controls"><button type="button" id="preview-fit" hidden aria-label="Fit whole diagram">Fit</button><button type="button" id="preview-actual" hidden aria-label="Show diagram at actual size">100%</button><button type="button" data-preview-zoom="-1" aria-label="Zoom out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button><span id="preview-zoom">100%</span><button type="button" data-preview-zoom="1" aria-label="Zoom in"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button><button type="button" id="preview-download" aria-label="Download file"><svg><use href="#icon-arrow-down"/></svg></button><button type="button" id="preview-close" aria-label="Hide viewer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div></header><div id="preview-body" role="tabpanel" tabindex="0"></div>';
   document.body.appendChild(panel);
   const host=panel.querySelector('#preview-body');let body=host;
   const tabList=panel.querySelector('#preview-tabs');
@@ -102,7 +102,7 @@ const OrbitPreview = (()=> {
         const p=tab.position||{};
         entries.push({id:`viewer-tab-${++nextId}`,storageId:tab.storageId,key:tab.key,name:tab.name.slice(0,1000),kind:String(tab.kind||'FILE').slice(0,6),
           origin:typeof tab.origin==='string'?tab.origin:null,ref:fileRef(tab.ref),previewId:typeof tab.previewId==='string'?tab.previewId:'',source:null,
-          zoom:bounded(tab.zoom,.25,3,1),scrollTop:bounded(tab.scrollTop,0,1e9),scrollLeft:bounded(tab.scrollLeft,0,1e9),wordScroll:bounded(tab.wordScroll,0,1e9),
+          zoom:bounded(tab.zoom,/^DIAGRA/.test(tab.kind)? .01 : .25,3,1),scrollTop:bounded(tab.scrollTop,0,1e9),scrollLeft:bounded(tab.scrollLeft,0,1e9),wordScroll:bounded(tab.wordScroll,0,1e9),
           position:{sheet:Math.floor(bounded(p.sheet,0,1000)),offset:Math.floor(bounded(p.offset,0,1e6)),pdfPage:Math.floor(bounded(p.pdfPage,1,1e6,1)),pdfRendered:p.pdfRendered===true,archivePath:typeof p.archivePath==='string'?p.archivePath.slice(0,500):''}});
       }
       selected=entries.find(entry=>entry.storageId===saved.selected)||entries.at(-1)||null;
@@ -189,6 +189,7 @@ const OrbitPreview = (()=> {
       const count=toggle.querySelector('.viewer-tab-count');if(count){count.hidden=!entries.length;count.textContent=String(entries.length);}
     }
     panel.querySelectorAll('[data-preview-zoom]').forEach(button=>button.disabled=!selected);
+    for(const id of ['preview-fit','preview-actual'])panel.querySelector('#'+id).hidden=selected?.source?.artifact?.spec.kind!=='diagram';
     if(!selected){panel.querySelector('#preview-download').disabled=true;panel.querySelector('#preview-name').textContent='Viewer';panel.querySelector('#preview-zoom').textContent='';body.removeAttribute('aria-labelledby');}
   }
   function renderTabs(){
@@ -395,7 +396,7 @@ const OrbitPreview = (()=> {
       }
     };
     body.append(button);
-    if(position.pdfRendered)void button.onclick();
+    if(position.pdfRendered || matchMedia('(pointer: coarse)').matches && matchMedia('(max-width: 900px)').matches)void button.onclick();
   }
   async function showArchive(blob,request,entry){
     const archive=await OrbitArchives.open(blob);if(request!==serial)return;
@@ -438,7 +439,7 @@ const OrbitPreview = (()=> {
     const download=panel.querySelector('#preview-download');download.disabled=true;
     modalState();tabList.querySelector(`#${entry.id}`)?.focus();window.dispatchEvent(new Event('resize'));
     try {
-      const {attachment,artifact}=await resolveSource(entry);if(request!==serial)return;
+      const {attachment,artifact}=await resolveSource(entry);if(request!==serial)return;syncControls();
       panel.classList.toggle('image-preview',!!attachment&&isImageFile(attachment));modalState();
       let blob=artifact?null:attachment.file || await retrieve(attachment.previewId);
       if(request!==serial)return;
@@ -527,7 +528,16 @@ const OrbitPreview = (()=> {
   panel.querySelector('#preview-close').onclick=close;
   const toggle=document.querySelector('#open-viewer');if(toggle)toggle.onclick=()=>panel.hidden?void open():close();
   panel.querySelector('#preview-download').onclick=()=>{if(!downloadBlob)return;const url=URL.createObjectURL(downloadBlob),a=document.createElement('a');a.href=url;a.download=downloadName;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
-  panel.querySelectorAll('[data-preview-zoom]').forEach(button=>button.onclick=()=>{zoom=Math.max(.25,Math.min(3,zoom+Number(button.dataset.previewZoom)*.25));setZoom();saveSession();});
+  panel.querySelector('#preview-fit').onclick=()=>{
+    const svg=body.querySelector('.preview-document > svg');if(!svg)return;
+    const bounds=svg.viewBox.baseVal,padding=getComputedStyle(body);
+    const width=body.clientWidth-parseFloat(padding.paddingLeft)-parseFloat(padding.paddingRight);
+    const height=body.clientHeight-parseFloat(padding.paddingTop)-parseFloat(padding.paddingBottom);
+    if(bounds.width<=0||bounds.height<=0||width<=0||height<=0)return;
+    zoom=Math.min(1,width/bounds.width,height/bounds.height);setZoom();body.scrollTop=body.scrollLeft=0;saveSession();
+  };
+  panel.querySelector('#preview-actual').onclick=()=>{zoom=1;setZoom();body.scrollTop=body.scrollLeft=0;saveSession();};
+  panel.querySelectorAll('[data-preview-zoom]').forEach(button=>button.onclick=()=>{const diagram=selected?.source?.artifact?.spec.kind==='diagram',direction=Number(button.dataset.previewZoom);zoom=Math.max(diagram ? .01 : .25,Math.min(3,diagram?zoom*(direction>0?1.25:.8):zoom+direction*.25));setZoom();saveSession();});
   document.addEventListener('keydown',event=>{
     if(panel.hidden)return;
     if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close();}

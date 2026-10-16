@@ -99,3 +99,31 @@ test('repeated and unknown source expansion requests terminate without committin
  }
  assert.equal(L.lengthPlan({kind:'docx',count:8},{},'Write 90,000 words').targetWords,90000);
 });
+test('final export measures direct PDF recipes outside the long-document drafting path',async()=>{
+ const recipe={kind:'pdf',title:'Direct report',blocks:[{type:'paragraph',text:'Complete evidence and qualifications. '.repeat(50)}]};
+ const seen=[];const h=ui({OrbitLongDocuments:L,OrbitWidgets:{...W,generate:async(spec,options)=>{seen.push(options.measureOnly===true);return options.measureOnly?{pages:12}:new Blob(['PDF bytes']);}}});
+ h.message.text='```orbit-widget\n'+JSON.stringify(recipe)+'\n```';h.message.artifacts=[];
+ await h.ctx.finalizeMessageWidgets(h.message,'Create a 12 page PDF');
+ assert.deepEqual(seen,[true,false]);assert.match(h.message.text,/12 pages \(requested 12\)/);assert.equal(h.message.artifacts[0].size,9);
+});
+test('final export reports unavoidable overflow honestly without losing the downloadable PDF',async()=>{
+ const recipe={kind:'pdf',title:'Verbatim report',blocks:[{type:'paragraph',text:'Complete original text. '.repeat(50)}]};
+ const h=ui({OrbitLongDocuments:L,OrbitWidgets:{...W,generate:async(spec,options)=>options.measureOnly?{pages:37}:new Blob(['PDF bytes'])}});
+ h.message.text='```orbit-widget\n'+JSON.stringify(recipe)+'\n```';h.message.artifacts=[];
+ await h.ctx.finalizeMessageWidgets(h.message,'Create a 12 page PDF, keep the text verbatim');
+ assert.match(h.message.text,/37 pages \(requested 12\)/);assert.match(h.message.text,/exceeds the limit/);assert.equal(h.message.artifacts[0].error,undefined);
+});
+test('final export discloses unresolved underflow and retains a downloadable PDF',async()=>{
+ const recipe={kind:'pdf',title:'Brief evidence',blocks:[{type:'paragraph',text:'Complete original text. '.repeat(50)}]};
+ const h=ui({OrbitLongDocuments:L,OrbitWidgets:{...W,generate:async(spec,options)=>options.measureOnly?{pages:8}:new Blob(['PDF bytes'])},requestLocalReply:async()=>({text:'{"additions":[]}'})});
+ h.message.text='```orbit-widget\n'+JSON.stringify(recipe)+'\n```';h.message.artifacts=[];
+ await h.ctx.finalizeMessageWidgets(h.message,'Create a 12 page PDF');
+ assert.match(h.message.text,/8 pages \(requested 12\)/);assert.match(h.message.text,/shorter than requested/);assert.equal(h.message.artifacts[0].error,undefined);assert.equal(h.message.artifacts[0].size,9);
+});
+test('contextual PDF followups retain a maximum rather than turning it into an exact count',async()=>{
+ const recipe={kind:'pdf',title:'Brief evidence',blocks:[{type:'paragraph',text:'Complete original text. '.repeat(50)}]};
+ const h=ui({OrbitLongDocuments:L,OrbitWidgets:{...W,generate:async(spec,options)=>options.measureOnly?{pages:8}:new Blob(['PDF bytes'])},requestLocalReply:async()=>assert.fail('No expansion for a maximum')});
+ h.ctx.state.messages[0].text='Create a PDF up to 12 pages';h.message.text='```orbit-widget\n'+JSON.stringify(recipe)+'\n```';h.message.artifacts=[];
+ await h.ctx.finalizeMessageWidgets(h.message,'Make it now');
+ assert.match(h.message.text,/8 pages \(requested up to 12\)/);assert.doesNotMatch(h.message.text,/shorter/);assert.equal(h.message.artifacts[0].error,undefined);
+});

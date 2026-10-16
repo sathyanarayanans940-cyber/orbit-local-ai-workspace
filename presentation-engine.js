@@ -15,6 +15,15 @@ export const THEMES={
  olive:{ink:'292E1F',accent:'62682F',bright:'DAE2A4',paper:'F8F9F0',text:'373D28',muted:'646B4D',rule:'DFE2CB'},
  graphite:{ink:'23262B',accent:'4D5560',bright:'D5DCE6',paper:'F6F7F9',text:'2D333B',muted:'646D79',rule:'DDE1E7'},
  espresso:{ink:'30221D',accent:'855038',bright:'F3CBAD',paper:'FCF6F0',text:'422E25',muted:'786151',rule:'E9D9CB'},
+ porcelain:{"ink":"242321","accent":"44413B","bright":"E8DFCF","paper":"FCFAF6","text":"242321","muted":"716C63","rule":"E3DED5"},
+ blueprint:{"ink":"10233E","accent":"175CB0","bright":"94C9FF","paper":"F4F8FD","text":"18304B","muted":"526A84","rule":"D4E1EF"},
+ sage:{"ink":"25372B","accent":"446C4C","bright":"C4DDB4","paper":"F7F9F2","text":"283A2C","muted":"5D6E59","rule":"DCE4D4"},
+ aurora:{"ink":"102D2B","accent":"147366","bright":"90E4C9","paper":"F1FAF7","text":"153D35","muted":"4F7065","rule":"CEE6DC"},
+ goldleaf:{"ink":"25231C","accent":"846317","bright":"E8CC83","paper":"FBF9F2","text":"343021","muted":"74694E","rule":"E7DFC8"},
+ orchid:{"ink":"302039","accent":"904286","bright":"EDBAE3","paper":"FCF6FB","text":"422B40","muted":"7D6077","rule":"ECD9E7"},
+ vermilion:{"ink":"2C2423","accent":"B43C2F","bright":"FFB7A2","paper":"FCF7F4","text":"3C2A27","muted":"78625C","rule":"E8DAD3"},
+ slate:{"ink":"202F3D","accent":"456783","bright":"B9D8EC","paper":"F5F8FA","text":"273C4B","muted":"5D6F7D","rule":"D9E3E9"},
+
 };
 const runs=v=>typeof v==='string'?[{text:v}]:v;
 const rich=v=>runs(v).map(r=>({text:r.text,options:{...(r.bold?{bold:true}:{}),...(r.italic?{italic:true}:{}),...(r.underline?{underline:{style:'sng'}}:{}),...(r.color?{color:r.color}:{})}}));

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Orbit message rendering regression preview</title>
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  html, body { overflow: auto; height: auto; }
+  body { margin: 0; padding: 24px; background: var(--bg); }
+  #preview { max-width: 850px; margin: auto; }
+  .message { margin-bottom: 26px; animation: none; }
+  .message.assistant .message-body { max-width: 100%; }
+</style>
+<main id="preview"></main>
+<script src="../vendor/katex/katex.min.js"></script>
+<script>
+  // Exercise the production renderer without initializing Orbit or modifying chats.
+  document.documentElement.dataset.theme = new URLSearchParams(location.search).get('theme') || 'dark';
+  fetch('../app.js').then(response => response.text()).then(source => {
+    const rendererSource = source.slice(source.indexOf('function escapeHtml('), source.indexOf('function latestUserMessageIndex('));
+    const render = new Function('window', 'icons', 'state', rendererSource + '; return renderRichText;')(window, {copy: ''}, {currentChat: 'preview'});
+    const prompt = 'bro solve using karastuba step by step pls bro\n\n1. x=123, y=67\n2. x=1234567, y=628\n3. x=12345, y=6789432';
+    const reply = '- **Step 1 (Calculate $ac$):** $12 \\times 6 = 72$\n- **Step 2 (Calculate $bd$):** $3 \\times 7 = 21$\n- **Step 3 (Calculate the middle term):**\n\n$(a+b)(c+d) = (12+3)(6+7) = 15 \\times 13 = 195$\n\nMiddle $= 195 - 72 - 21 = 102$';
+    const finalResult = String.raw`$$= \mathbf{83,815,538,040}$$`;
+    const bellmanFord = String.raw`1. Repeat the relaxation process $|V| - 1$ times, where $|V|$ is the number of vertices.
+2. In each pass, check every edge $(u, v)$ and if $dist[u] + weight < dist[v]$, update $dist[v]$.
+3. Time complexity is $O(V \times E)$.`;
+
+    document.querySelector('#preview').innerHTML = `<article class="message user"><div class="message-body"><div class="message-bubble"><div class="message-text">${render(prompt, 0, {inferDisplayMath: false})}</div></div></div></article><article class="message assistant"><div class="message-body"><div class="message-text">${render(bellmanFord + '\n\n' + reply + '\n\n' + finalResult, 1)}</div></div></article>`;
+  });
+</script>
+</html>

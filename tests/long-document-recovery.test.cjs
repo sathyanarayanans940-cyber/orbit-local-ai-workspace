@@ -5,6 +5,19 @@ const outline={title:'Research',sections:Array.from({length:8},(_,i)=>({title:'S
 const block=i=>({type:'paragraph',text:`FACT-${i} `+Array.from({length:490},(_,j)=>`analysis${i}-${j}`).join(' ')});
 const options=extra=>({model:{id:'3b'},context:[],instruction:'',normalize:W.normalize,checkpointStore:L.createCheckpoints({indexedDB:null}),retryDelay:async()=>{},...extra});
 const task=m=>JSON.parse(m[1].text);
+test('a heartbeat-only provider stall stops once and resumes saved sections without redrafting',async()=>{
+ const checkpointStore=L.createCheckpoints({indexedDB:null}),statuses=[];let stalledCalls=0;
+ const common=options({checkpointStore,onStatus:s=>statuses.push(s)});
+ await assert.rejects(L.build('Create an 8 page PDF', {...common,plan:async messages=>{
+  const t=task(messages);if(!t.sectionNumber)return JSON.stringify(outline);
+  if(t.sectionNumber===2){stalledCalls++;throw Object.assign(Error('DeepSeek sent no answer or reasoning for three minutes.'),{providerStalled:true,retryable:false});}
+  return JSON.stringify({blocks:[block(t.sectionNumber)]});
+ }}),error=>error.providerStalled===true&&error.documentGeneration===true&&error.completedSections===1);
+ assert.equal(stalledCalls,1);assert.ok(statuses.some(s=>/^Writing 2\/8:/.test(s)));
+ let resumed=0;
+ const result=await L.build('Create an 8 page PDF',{...common,plan:async messages=>{const t=task(messages);assert.ok(t.sectionNumber>=2);resumed++;return JSON.stringify({blocks:[block(t.sectionNumber)]});}});
+ assert.equal(resumed,7);assert.equal(W.extract(result.text).artifacts[0].blocks.length,8);
+});
 test('thin sections are repaired, page breaks removed, rich text counted without counting headings',async()=>{
  let repaired=0;const result=await L.build('Create an 8 page PDF report',options({plan:async m=>{const t=task(m);if(!t.sectionNumber)return JSON.stringify(outline);if(m.length===2)return JSON.stringify({blocks:[{type:'heading',text:'Title'},{type:'paragraph',text:'Only four words here'}]});repaired++;assert.match(m.at(-1).text,/too thin/);return JSON.stringify({blocks:[{type:'pageBreak'},block(t.sectionNumber)]});}}));
  const spec=W.extract(result.text).artifacts[0];assert.equal(repaired,8);assert.equal(spec.blocks.length,8);assert.equal(spec.blocks.some(b=>b.type==='pageBreak'),false);assert.ok(L.wordCount(spec.blocks)>3800);

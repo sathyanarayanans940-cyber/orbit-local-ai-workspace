@@ -1,0 +1,30 @@
+<!doctype html><meta charset="utf-8"><title>Orbit formula layout audit</title>
+<style>body{font:16px system-ui;background:#e9edf2;color:#243244;margin:24px}button{margin-right:16px;padding:10px 16px;border:1px solid #bcc7d5;border-radius:8px;background:white}iframe{width:100%;height:1200px;border:0}canvas{display:block;margin:24px auto;max-width:100%;height:auto;box-shadow:0 2px 12px #17233420}#status{white-space:pre-wrap}</style>
+<h1>Conditional formulas</h1>
+<p>A synthetic fixture checks editable formula text, legacy spaces and tabs, explicit conditions, and ordinary calculation steps.</p>
+<button id="build">Build in browser</button><button id="word" disabled>Show Word preview</button><button id="pdf" disabled>Show PDF pages</button>
+<p id="status">Ready. Run ORBIT_FORMULA_QA=1 node --test tests/formula-layout.test.cjs to create the input fixture.</p><main id="preview"></main>
+<script src="/vendor/widgets/engine.js?v=26"></script><script src="/widgets.js?v=53"></script>
+<script type="module">
+import * as pdfjs from '/vendor/readers/pdf.min.mjs';
+pdfjs.GlobalWorkerOptions.workerSrc='/vendor/readers/pdf.worker.min.mjs';
+let wordHtml,documentPdf;
+const status=document.querySelector('#status'),preview=document.querySelector('#preview');
+document.querySelector('#build').onclick=async()=>{try{
+ status.textContent='Building Word and PDF with the shipped engine…';
+ const response=await fetch('/tests/output/formula-layout/spec.json');if(!response.ok)throw Error('Create the QA input fixture first.');
+ const spec=await response.json(),engine=await OrbitWidgets.engine(),word=await OrbitWidgets.generate(spec),pdf=await OrbitWidgets.generate({...spec,kind:'pdf'});
+ wordHtml=await engine.wordPreview(word);documentPdf=await pdfjs.getDocument({data:new Uint8Array(await pdf.arrayBuffer())}).promise;
+ const doc=new DOMParser().parseFromString(wordHtml,'text/html'),paragraphs=[...doc.querySelectorAll('p')];
+ for(const condition of ['if i = 0','if w[i] > c','if w[i] <= c','if x ≥ 0','if x < 0']){
+  const p=paragraphs.find(p=>p.textContent.trim()===condition);if(!p)throw Error('Missing separate Word condition: '+condition);
+  if(p.style.textAlign!=='center')throw Error('Condition is not centered: '+condition);
+ }
+ let text='';for(let i=1;i<=documentPdf.numPages;i++)text+=(await (await documentPdf.getPage(i)).getTextContent()).items.map(x=>x.str).join(' ');
+ for(const token of ['if i = 0','if w[i] > c','if w[i] <= c','= 6 N'])if(!text.includes(token))throw Error('PDF lost text: '+token);
+ status.textContent=`PASS: all five conditions retained in separate centered Word paragraphs; ${documentPdf.numPages} searchable PDF page(s); ordinary equality steps retained.`;
+ document.querySelector('#word').disabled=false;document.querySelector('#pdf').disabled=false;document.querySelector('#word').click();
+}catch(e){status.textContent='FAIL: '+e.message;}};
+document.querySelector('#word').onclick=()=>{preview.replaceChildren();const frame=document.createElement('iframe');frame.title='Word layout preview';frame.sandbox='';frame.srcdoc=wordHtml;preview.append(frame);};
+document.querySelector('#pdf').onclick=async()=>{preview.replaceChildren();for(let i=1;i<=documentPdf.numPages;i++){const page=await documentPdf.getPage(i),viewport=page.getViewport({scale:1.25}),canvas=document.createElement('canvas');canvas.width=viewport.width;canvas.height=viewport.height;canvas.setAttribute('aria-label','PDF page '+i);preview.append(canvas);await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;}};
+</script>
