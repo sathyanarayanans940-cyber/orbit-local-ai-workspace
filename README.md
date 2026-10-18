@@ -41,6 +41,10 @@ This remains an actively developed personal project. Generated content depends o
 
 ## Screens and demo
 
+![Lunivilo desktop with a native coordinate diagram](assets/lunivilo-desktop.png)
+
+*Actual interface with synthetic demonstration data; no private chats or account credentials.*
+
 The hosted companion is available at **https://lunivilo.pages.dev**. Google sign-in is required, and model generation requires a supported provider connection. No provider credentials are distributed in this showcase.
 
 ## Source access
