@@ -1,0 +1,14 @@
+# Never publish application source or release archives in the showcase.
+*.js
+*.mjs
+*.cjs
+*.py
+*.map
+*.zip
+*.pem
+*.key
+.env*
+node_modules/
+dist/
+release/
+lunvilo-web/
