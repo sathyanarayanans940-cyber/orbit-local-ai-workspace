@@ -2,53 +2,53 @@
 
 ![Orbit project overview](assets/overview.svg)
 
-**A personal software project by [Sathyanarayanan S](https://github.com/sathyanarayanans940-cyber).**
+Built by [Sathyanarayanan S](https://github.com/sathyanarayanans940-cyber).
 
-Orbit brings local AI models, optional API providers, persistent conversations, document tools and cross-chat recall into one workspace. I have developed it since September 2026, with ongoing work on reliability, responsive layouts and efficient model context.
+Orbit is an AI workspace for LM Studio and Ollama, with optional cloud APIs, saved conversations, document generation and search across chats. I've been building it since September 2026.
 
 **[Try Lunivilo, the hosted companion](https://lunivilo.pages.dev)** · **[View my profile](https://github.com/sathyanarayanans940-cyber)**
 
-This is the public project showcase. The application source, development history and installer releases are maintained privately. Technical source review can be arranged with the maintainer.
+This page contains the project overview and screenshots. The application source and installers are private.
 
-## What the project does
+## Features
 
 | Area | Capabilities |
 | --- | --- |
 | Conversations | Persistent chat history, file attachments, search and project organization |
 | Models | Ollama and LM Studio locally; optional OpenAI, Anthropic Claude, DeepSeek and Gemini adapters |
-| Spending controls | User-managed model/provider allowlists, usage accounting and input-tier safeguards |
+| Usage controls | Choose allowed providers and models, track usage and limit input size to avoid higher pricing tiers |
 | Documents | Structured PDF, Word, PowerPoint, Excel, notebook, text and ZIP generation with previews |
 | Visuals | Native SVG charts and diagrams, Cartesian plots, hull computation and saved-geometry repair |
-| Memory | Automatic bounded cross-chat continuity, original-source excerpts and local meaning search |
-| Long chats | Context compaction with problem/answer records and retrieval of original passages |
+| Chat memory | Search earlier chats locally and retrieve excerpts from the original messages |
+| Long chats | Summarize older context, retain problem/answer records and retrieve original passages when needed |
 | Interface | Light/dark/custom themes, responsive phone layouts and PWA support |
 
 ## Engineering approach
 
-The local application uses a JavaScript interface, IndexedDB persistence and Python provider gateways. Structured recipes are validated before the document and SVG engines render them. Provider adapters keep model capabilities, usage and streaming behavior consistent with the workspace.
+The local app uses JavaScript, IndexedDB and Python gateways for model providers. Models return structured recipes for documents and SVG visuals; Orbit validates these before rendering them. Each provider adapter handles model capabilities, streaming and usage reporting.
 
-Cross-chat retrieval combines exact search with a small local meaning model. Evidence is bounded, attributed to original messages and invalidated after edits or deletion. Long-context controls preserve recorded problems and answers rather than dropping older messages indiscriminately.
+Chat retrieval combines exact search with a small model that runs locally to find related text. Retrieved excerpts link to their original messages, and the index is updated when messages change or are deleted. Long-chat summaries retain problem/answer records and can be supplemented with original passages.
 
 Lunivilo is the separately hosted companion, built on Cloudflare with Google sign-in and optional Google Drive synchronization. Users provide their own supported model-provider credentials. API usage is billed by the selected provider.
 
 ## Validation and current status
 
-As of 18 October 2026, the shared development workspace passes **1,049 Node tests**. An isolated Orbit source checkout passes **998 Node tests**, with two hosted-only parity checks skipped. Python contract checks pass **147 tests**, with 14 platform/environment-dependent skips.
+The 18 October 2026 validation recorded **998 passing Node tests** in an Orbit-only checkout, with two hosted-only checks skipped. Python contract tests recorded **147 passes** and 14 platform/environment-dependent skips. The shared workspace, which also includes hosted code, recorded 1,049 passing Node tests.
 
 Coverage includes streaming, tool routing, context guards, memory retrieval, diagram geometry, document recovery, model selection and persistence. Browser checks are run separately for desktop and mobile layouts.
 
-This remains an actively developed personal project. Generated content depends on the selected model; automated checks do not guarantee every output is correct.
+Orbit is still in active development. Generated content depends on the selected model and can contain errors.
 
-## Screens and demo
+## Screenshot
 
 ![Lunivilo desktop with a native coordinate diagram](assets/lunivilo-desktop.png)
 
-*Actual interface with synthetic demonstration data; no private chats or account credentials.*
+*Lunivilo displaying a coordinate diagram with fictional example data.*
 
-The hosted companion is available at **https://lunivilo.pages.dev**. Google sign-in is required, and model generation requires a supported provider connection. No provider credentials are distributed in this showcase.
+Lunivilo requires Google sign-in and your own supported provider connection for model generation.
 
 ## Source access
 
-This public repository contains project documentation and presentation assets only. It does not contain application code, installable source archives or credentials. Recruiters and technical reviewers can contact the maintainer through the linked GitHub profile to arrange a review.
+For a technical source review, contact me through my [GitHub profile](https://github.com/sathyanarayanans940-cyber).
 
 © 2026 Sathyanarayanan S. Third-party components retain their respective licenses.
